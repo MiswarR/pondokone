@@ -1,0 +1,13 @@
+{
+  "name": "pondokone-backend",
+  "version": "1.0.0",
+  "description": "PondokOne REST API /v1 — modular monolith, Node.js built-in modules only",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "PondokOne — Platform Sekolah & Pesantren",
+  "short_name": "PondokOne",
+  "description": "Absensi, hafalan, nilai, perilaku, tagihan, dan billing SaaS dalam satu platform untuk sekolah dan pondok pesantren.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#14161c",
+  "theme_color": "#14161c",
+  "lang": "id",
+  "dir": "ltr",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

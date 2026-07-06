@@ -1,0 +1,10 @@
+# Data runtime & rahasia server — jangan pernah ikut ke repositori
+backend/data/
+backend/.secret
+
+# Dependensi (jika suatu saat ditambahkan)
+node_modules/
+
+# File sistem
+Thumbs.db
+.DS_Store
