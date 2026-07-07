@@ -1,5 +1,5 @@
 /* Service worker — app shell cache agar aplikasi ringan & bisa dibuka offline. */
-const CACHE = 'pondokone-v1';
+const CACHE = 'pondokone-v2';
 const SHELL = [
   './',
   './index.html',
@@ -18,6 +18,9 @@ const SHELL = [
   './js/portals/ortu.js',
   './assets/icon.svg',
   './assets/icon-maskable.svg',
+  './assets/icon-192.png',
+  './assets/icon-512.png',
+  './assets/icon-maskable-512.png',
 ];
 
 self.addEventListener('install', (e) => {
