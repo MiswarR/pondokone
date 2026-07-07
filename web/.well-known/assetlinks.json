@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "site.albayn.mahadone",
+    "sha256_cert_fingerprints": ["97:A7:93:45:D4:3D:64:EC:90:9D:5A:14:5C:47:49:8C:9C:DC:E2:FC:97:AC:6C:F9:38:1F:85:03:A0:9B:3D:97"]
+  }
+}]
