@@ -8,15 +8,15 @@ import { t, getLangs, getLang, setLang } from './i18n.js';
 import * as Store from './store.js';
 import { el, field, input, toast } from './ui.js';
 
+/* Akun Web Master sengaja tidak ditampilkan di halaman publik.
+   Login master tetap berfungsi dengan mengetik kredensial secara manual. */
 const DEMO_ACCOUNTS = [
-  { role: 'master', portal: 'master', id: 'master@pondokone.id', pw: 'master123' },
   { role: 'admin', portal: 'admin', id: 'admin@alhikmah.sch.id', pw: 'admin123' },
   { role: 'teacher', portal: 'guru', id: 'ustadz@alhikmah.sch.id', pw: 'guru123' },
   { role: 'guardian', portal: 'ortu', id: 'wali@gmail.com', pw: 'wali123' },
 ];
 
 const PORTALS = [
-  { id: 'master', icon: '🌐', nameKey: 'auth.portal.master', descKey: 'auth.portal.masterDesc' },
   { id: 'admin', icon: '🏫', nameKey: 'auth.portal.admin', descKey: 'auth.portal.adminDesc' },
   { id: 'guru', icon: '👳', nameKey: 'auth.portal.guru', descKey: 'auth.portal.guruDesc' },
   { id: 'ortu', icon: '👨‍👩‍👧', nameKey: 'auth.portal.ortu', descKey: 'auth.portal.ortuDesc' },
