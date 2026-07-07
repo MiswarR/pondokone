@@ -103,6 +103,23 @@ export function login(identifier, password) {
   return user || null;
 }
 
+export function changePassword(userId, currentPassword, newPassword, actor) {
+  const user = get('users', userId);
+  if (!user) return { ok: false, err: 'user_not_found' };
+  if (user.password !== currentPassword) return { ok: false, err: 'wrong_password' };
+  if (!newPassword || newPassword.length < 6) return { ok: false, err: 'too_short' };
+  update('users', userId, { password: newPassword }, actor);
+  return { ok: true };
+}
+
+export function resetPasswordByAdmin(userId, newPassword, actor) {
+  const user = get('users', userId);
+  if (!user) return { ok: false, err: 'user_not_found' };
+  if (!newPassword || newPassword.length < 6) return { ok: false, err: 'too_short' };
+  update('users', userId, { password: newPassword }, actor);
+  return { ok: true };
+}
+
 /* ---------- Notifikasi ---------- */
 export function notify(tenantId, target, title, body, kind = 'info') {
   return insert('notifications', { tenantId, target, title, body, kind, read: false, at: new Date().toISOString() });

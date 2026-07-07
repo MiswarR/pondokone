@@ -341,11 +341,28 @@ const routes = {
         name: UI.input({ value: existing?.name || '' }),
         phone: UI.input({ value: existing?.phone || '' }),
         email: UI.input({ type: 'email', value: existing?.email || '' }),
+        password: UI.input({ type: 'password', placeholder: 'Min. 6 karakter' }),
       };
       const roles = checkboxGroup(['guru', 'ustadz', 'wali_kelas', 'musyrif', 'admin_keuangan'].map((r) => ({ value: r, label: r })), existing?.staffRoles || []);
       const cls = checkboxGroup(classes.map((c) => ({ value: c.id, label: c.name })), existing?.classIds || []);
       const hlq = checkboxGroup(halaqahs.map((h) => ({ value: h.id, label: h.name })), existing?.halaqahIds || []);
       const sub = checkboxGroup(subjects.map((s) => ({ value: s.id, label: s.name })), existing?.subjectIds || []);
+
+      const pwResetRow = existing ? UI.el('div', { class: 'full', style: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } },
+        UI.field('Reset kata sandi', f.password),
+        UI.el('button', {
+          type: 'button', class: 'btn sm',
+          style: { marginTop: '22px', whiteSpace: 'nowrap' },
+          onclick: () => {
+            const np = f.password.value.trim();
+            if (np.length < 6) { UI.toast('Minimal 6 karakter', 'warn'); return; }
+            Store.resetPasswordByAdmin(existing.id, np, ctx.session.userId);
+            f.password.value = '';
+            UI.toast('Kata sandi berhasil direset', 'ok');
+          },
+        }, 'Reset Sandi'),
+      ) : UI.field('Kata sandi awal', f.password, 'Akan digunakan guru untuk login pertama kali');
+
       const m = UI.modal({
         title: existing ? t('common.edit') : t('adm.teachers.add'),
         wide: true,
@@ -354,6 +371,7 @@ const routes = {
           UI.field('Email', f.email), UI.field(t('adm.field.staffRoles'), roles.node),
           UI.field(t('common.class'), cls.node), UI.field(t('adm.field.halaqah'), hlq.node),
           UI.el('div', { class: 'full' }, UI.field(t('adm.field.subjects'), sub.node)),
+          pwResetRow,
         ),
         footer: [
           UI.el('button', { class: 'btn ghost', onclick: () => m.close() }, t('common.cancel')),
@@ -361,6 +379,8 @@ const routes = {
             class: 'btn primary',
             onclick: () => {
               if (!f.name.value.trim() || !f.phone.value.trim()) { UI.toast(t('common.required'), 'warn'); return; }
+              const pw = f.password.value.trim();
+              if (!existing && pw.length < 6) { UI.toast('Kata sandi minimal 6 karakter', 'warn'); return; }
               const data = {
                 tenantId: tid, role: 'teacher', name: f.name.value.trim(), phone: f.phone.value.trim(),
                 email: f.email.value.trim() || null,
@@ -369,7 +389,7 @@ const routes = {
                 status: 'active',
               };
               if (existing) Store.update('users', existing.id, data, ctx.session.userId);
-              else Store.insert('users', { ...data, password: 'guru123' }, ctx.session.userId);
+              else Store.insert('users', { ...data, password: pw }, ctx.session.userId);
               UI.toast(t('common.saved'), 'ok'); m.close(); render();
             },
           }, t('common.save')),
@@ -412,10 +432,27 @@ const routes = {
         phone: UI.input({ value: existing?.phone || '' }),
         email: UI.input({ type: 'email', value: existing?.email || '' }),
         address: UI.textarea({ value: existing?.address || '' }),
+        password: UI.input({ type: 'password', placeholder: 'Min. 6 karakter' }),
       };
       const kids = checkboxGroup(students.map((s) => ({ value: s.id, label: `${s.name} (${classNameOf(s.classId)})` })), existing?.childIds || []);
       const notif = checkboxGroup(['nilai', 'absensi', 'perilaku', 'tagihan'].map((n) => ({ value: n, label: n })),
         Object.entries(existing?.notifPrefs || { nilai: true, absensi: true, perilaku: true, tagihan: true }).filter(([, v]) => v).map(([k]) => k));
+
+      const pwResetRow = existing ? UI.el('div', { class: 'full', style: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' } },
+        UI.field('Reset kata sandi', f.password),
+        UI.el('button', {
+          type: 'button', class: 'btn sm',
+          style: { marginTop: '22px', whiteSpace: 'nowrap' },
+          onclick: () => {
+            const np = f.password.value.trim();
+            if (np.length < 6) { UI.toast('Minimal 6 karakter', 'warn'); return; }
+            Store.resetPasswordByAdmin(existing.id, np, ctx.session.userId);
+            f.password.value = '';
+            UI.toast('Kata sandi berhasil direset', 'ok');
+          },
+        }, 'Reset Sandi'),
+      ) : UI.field('Kata sandi awal', f.password, 'Akan digunakan wali untuk login pertama kali');
+
       const m = UI.modal({
         title: existing ? t('common.edit') : t('adm.guardians.add'),
         wide: true,
@@ -424,6 +461,7 @@ const routes = {
           UI.field('No. HP', f.phone), UI.field('Email', f.email),
           UI.el('div', { class: 'full' }, UI.field(t('adm.field.address'), f.address)),
           UI.field(t('nav.students'), kids.node), UI.field(t('adm.field.notif'), notif.node),
+          pwResetRow,
         ),
         footer: [
           UI.el('button', { class: 'btn ghost', onclick: () => m.close() }, t('common.cancel')),
@@ -431,6 +469,8 @@ const routes = {
             class: 'btn primary',
             onclick: () => {
               if (!f.name.value.trim() || !f.phone.value.trim()) { UI.toast(t('common.required'), 'warn'); return; }
+              const pw = f.password.value.trim();
+              if (!existing && pw.length < 6) { UI.toast('Kata sandi minimal 6 karakter', 'warn'); return; }
               const notifSel = notif.values();
               const data = {
                 tenantId: tid, role: 'guardian', name: f.name.value.trim(), relation: f.relation.value,
@@ -442,7 +482,7 @@ const routes = {
               };
               let saved;
               if (existing) saved = Store.update('users', existing.id, data, ctx.session.userId);
-              else saved = Store.insert('users', { ...data, password: 'wali123' }, ctx.session.userId);
+              else saved = Store.insert('users', { ...data, password: pw }, ctx.session.userId);
               // sinkron balik ke students.guardianIds
               for (const s of Store.studentsOf(tid)) {
                 const has = (s.guardianIds || []).includes(saved.id);

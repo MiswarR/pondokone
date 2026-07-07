@@ -69,11 +69,41 @@ export function renderSettings(container, ctx) {
 const SECTIONS = {
   account(session) {
     const user = Store.get('users', session.userId) || {};
-    return el('div', { class: 'panel', style: { maxWidth: '560px' } },
-      field(t('common.name'), input({ value: user.name || '', disabled: true })),
-      field('Email', input({ value: user.email || '', disabled: true })),
-      field('No. HP', input({ value: user.phone || '', disabled: true })),
-      el('div', { class: 'muted small' }, 'Demo: data akun dikelola oleh admin.'),
+
+    const pwCurrent = input({ type: 'password', placeholder: 'Kata sandi saat ini' });
+    const pwNew     = input({ type: 'password', placeholder: 'Minimal 6 karakter' });
+    const pwConfirm = input({ type: 'password', placeholder: 'Ulangi kata sandi baru' });
+    const pwErr     = el('div', { class: 'small', style: { color: 'var(--danger)', minHeight: '1.2em' } });
+
+    function doChangePassword() {
+      pwErr.textContent = '';
+      if (!pwCurrent.value) { pwErr.textContent = 'Masukkan kata sandi saat ini.'; return; }
+      if (pwNew.value.length < 6) { pwErr.textContent = 'Kata sandi baru minimal 6 karakter.'; return; }
+      if (pwNew.value !== pwConfirm.value) { pwErr.textContent = 'Konfirmasi kata sandi tidak cocok.'; return; }
+      const res = Store.changePassword(session.userId, pwCurrent.value, pwNew.value, session.userId);
+      if (!res.ok) {
+        pwErr.textContent = res.err === 'wrong_password' ? 'Kata sandi saat ini salah.' : 'Gagal mengganti kata sandi.';
+        return;
+      }
+      pwCurrent.value = ''; pwNew.value = ''; pwConfirm.value = '';
+      toast('Kata sandi berhasil diganti.', 'ok');
+    }
+
+    return el('div', { style: { maxWidth: '560px' } },
+      el('div', { class: 'panel' },
+        field(t('common.name'), input({ value: user.name || '', disabled: true })),
+        field('Email', input({ value: user.email || '', disabled: true })),
+        field('No. HP', input({ value: user.phone || '', disabled: true })),
+        el('div', { class: 'muted small' }, 'Data profil dikelola oleh admin.'),
+      ),
+      el('div', { class: 'panel', style: { marginTop: 'var(--s-4)' } },
+        el('h3', { style: { margin: '0 0 var(--s-3)' } }, 'Ganti Kata Sandi'),
+        field('Kata sandi saat ini', pwCurrent),
+        field('Kata sandi baru', pwNew),
+        field('Konfirmasi kata sandi baru', pwConfirm),
+        pwErr,
+        el('button', { class: 'btn primary', onclick: doChangePassword }, 'Simpan Kata Sandi Baru'),
+      ),
       el('hr', { style: { border: 'none', borderTop: '1px solid var(--line-soft)', margin: 'var(--s-4) 0' } }),
       el('button', {
         class: 'btn danger',
