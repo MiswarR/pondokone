@@ -5,6 +5,14 @@ backend/.secret
 # Dependensi (jika suatu saat ditambahkan)
 node_modules/
 
+# APK output & signing keys
+*.apk
+*.aab
+*.keystore
+signing-key-info.txt
+apk-output/
+mahadone-apk.zip
+
 # File sistem
 Thumbs.db
 .DS_Store
