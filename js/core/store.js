@@ -5,7 +5,7 @@
    dan agar mudah ditukar dengan REST API /v1 di produksi.
    ============================================================ */
 
-const LS_KEY = 'po.db.v3'; // v3: kebendaharaan lembaga (fndTransactions) + jabatan pengurus (fndRole)
+const LS_KEY = 'po.db.v4'; // v4: sesi absensi kustom (sessionTypes) dikelola admin
 const DRAFT_KEY = 'po.drafts.v1';
 
 let db = null;
@@ -277,6 +277,17 @@ function buildSeed() {
     { id: 'br_seragam', tenantId: T1, code: 'S-01', name: 'Melanggar aturan seragam', category: 'sedang', points: 15, defaultAction: 'Pembinaan dan pemberitahuan wali' },
     { id: 'br_asrama', tenantId: T1, code: 'S-02', name: 'Melanggar disiplin asrama', category: 'sedang', points: 20, defaultAction: 'Pembinaan musyrif' },
     { id: 'br_kabur', tenantId: T1, code: 'B-01', name: 'Keluar pondok tanpa izin', category: 'berat', points: 50, defaultAction: 'Pemanggilan wali dan surat peringatan' },
+  ];
+
+  /* --- Sesi absensi (dikelola admin sekolah; guru memilih saat mengabsen) --- */
+  const sessionTypes = [
+    { id: 'ses_muroja', tenantId: T1, name: 'Murojaah Hafalan', startTime: '04:30', endTime: '05:30', order: 1 },
+    { id: 'ses_pagi', tenantId: T1, name: 'Pagi', startTime: '07:00', endTime: '08:00', order: 2 },
+    { id: 'ses_siang', tenantId: T1, name: 'Siang', startTime: '13:00', endTime: '14:00', order: 3 },
+    { id: 'ses_malam', tenantId: T1, name: 'Malam', startTime: '19:30', endTime: '20:30', order: 4 },
+    { id: 'ses_s_pagi', tenantId: T3, name: 'Pagi', startTime: '07:00', endTime: '08:00', order: 1 },
+    { id: 'ses_s_siang', tenantId: T3, name: 'Siang', startTime: '13:00', endTime: '14:00', order: 2 },
+    { id: 'ses_c_pagi', tenantId: T2, name: 'Pagi', startTime: '07:30', endTime: '08:30', order: 1 },
   ];
 
   /* --- Siswa --- */
@@ -609,7 +620,7 @@ function buildSeed() {
 
   return {
     foundations, fndTransactions, plans, tenants, saasInvoices, users, students, classes, halaqahs, rooms, subjects,
-    academicYears, semesters, gradeComponents, behaviorRules,
+    academicYears, semesters, gradeComponents, behaviorRules, sessionTypes,
     attendanceSessions, memorizationRecords, memorizationTargets,
     gradeEntries, behaviorEvents,
     billProducts, bills, payments, receipts,
@@ -640,6 +651,19 @@ export function unitsOf(teacher) {
   const cls = (teacher.classIds || []).map((id) => ({ ...get('classes', id), unitType: 'class' }));
   const hlq = (teacher.halaqahIds || []).map((id) => ({ ...get('halaqahs', id), unitType: 'halaqah' }));
   return [...cls, ...hlq].filter((u) => u.id);
+}
+
+/* Sesi absensi yang dikelola admin — diurutkan; guru memilih dari daftar ini.
+   Bila tenant belum punya sesi kustom, sediakan default agar absensi tetap jalan. */
+export function sessionTypesOf(tenantId) {
+  const list = load().sessionTypes || [];
+  const rows = list.filter((s) => s.tenantId === tenantId)
+    .sort((a, b) => (a.order ?? 99) - (b.order ?? 99) || (a.startTime || '').localeCompare(b.startTime || ''));
+  if (rows.length) return rows;
+  return [
+    { id: '_pagi', tenantId, name: 'Pagi', startTime: '07:00', endTime: '08:00', order: 1 },
+    { id: '_siang', tenantId, name: 'Siang', startTime: '13:00', endTime: '14:00', order: 2 },
+  ];
 }
 
 export function studentsInUnit(unitType, unitId) {

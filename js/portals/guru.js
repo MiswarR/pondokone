@@ -126,7 +126,6 @@ I18n.extend({
 
 /* ---------- Util ---------- */
 const ATT_TONES = { hadir: 'ok', izin: '', sakit: 'warn', alfa: 'danger', terlambat: 'warn' };
-const SESSIONS = ['Pagi', 'Siang', 'Malam'];
 const TASK_KINDS = ['absensi', 'hafalan', 'nilai', 'perilaku'];
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -308,7 +307,9 @@ function renderAttendance(body, ctx, me) {
   const preKey = ctx.params[1] || '';
   let unit = units.find((u) => unitKey(u) === preKey) || units[0];
   let date = todayISO();
-  let session = 'Pagi';
+  /* Sesi diambil dari pengaturan admin sekolah (Struktur Akademik > Sesi Absensi) */
+  const sessionTypes = Store.sessionTypesOf(ctx.session.tenantId);
+  let session = sessionTypes[0]?.name || 'Pagi';
   const statusMap = new Map();
 
   const unitSel = UI.select(
@@ -317,7 +318,11 @@ function renderAttendance(body, ctx, me) {
   );
   const dateInp = UI.input({ type: 'date', value: date, onchange: (e) => { date = e.target.value; renderList(); } });
   const sesSel = UI.select(
-    SESSIONS.map((s) => ({ value: s, label: t(`guru.session.${s.toLowerCase()}`), selected: s === session })),
+    sessionTypes.map((s) => ({
+      value: s.name,
+      label: s.startTime ? `${s.name} (${s.startTime}–${s.endTime || '…'})` : s.name,
+      selected: s.name === session,
+    })),
     { onchange: (e) => { session = e.target.value; renderList(); } },
   );
 
