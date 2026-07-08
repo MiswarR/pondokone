@@ -1,5 +1,5 @@
 /* Service worker — app shell cache agar aplikasi ringan & bisa dibuka offline. */
-const CACHE = 'pondokone-v7';
+const CACHE = 'pondokone-v8';
 const SHELL = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   './js/core/ui.js',
   './js/core/auth.js',
   './js/core/settings.js',
+  './js/core/ai.js',
   './js/portals/master.js',
   './js/portals/yayasan.js',
   './js/portals/admin.js',

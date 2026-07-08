@@ -688,4 +688,29 @@ body.is-offline .offline-badge { display: block; }
   body * { visibility: hidden; }
   .receipt, .receipt * { visibility: visible; }
   .receipt { position: absolute; inset: 0; margin: 0; }
+
+  /* Rapor semester — cetak hanya lembar rapor, latar putih tinta hitam */
+  .rapor-sheet, .rapor-sheet * { visibility: visible; }
+  .rapor-sheet {
+    position: absolute; inset: 0; margin: 0; padding: 24px;
+    background: #fff !important; color: #111 !important;
+    border: none !important; box-shadow: none !important;
+  }
+  .rapor-sheet * { color: #111 !important; background: transparent !important; border-color: #999 !important; }
+  .rapor-sheet .no-print, .rapor-sheet select { display: none !important; }
+  .rapor-sheet .print-predikat { display: inline !important; }
 }
+
+/* Kolom isian rapor (contenteditable) — tampil seperti textarea, rapi saat dicetak */
+.rapor-edit {
+  min-height: 64px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: rgba(127, 127, 127, 0.06);
+  font-size: 0.92rem; line-height: 1.55; outline: none; white-space: pre-wrap;
+}
+.rapor-edit:focus { border-color: var(--accent); }
+.print-predikat { display: none; font-weight: 700; }
+.rapor-sheet table.rapor { width: 100%; border-collapse: collapse; margin: 8px 0 14px; }
+.rapor-sheet table.rapor th, .rapor-sheet table.rapor td {
+  border: 1px solid var(--line); padding: 6px 10px; font-size: 0.9rem; text-align: start;
+}
+.rapor-sheet table.rapor th { background: var(--accent-soft); }

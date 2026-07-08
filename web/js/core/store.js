@@ -38,7 +38,7 @@ export function resetDemo() {
 }
 
 /* ---------- CRUD generik ---------- */
-const AUDITED = new Set(['gradeEntries', 'behaviorEvents', 'bills', 'payments', 'saasInvoices', 'tenants', 'students', 'users', 'foundations', 'fndTransactions']);
+const AUDITED = new Set(['gradeEntries', 'behaviorEvents', 'bills', 'payments', 'saasInvoices', 'tenants', 'students', 'users', 'foundations', 'fndTransactions', 'reportCards']);
 
 export function list(name, filterFn) {
   const col = load()[name] || [];
