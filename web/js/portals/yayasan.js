@@ -76,6 +76,14 @@ I18n.extend({
     'yys.trs.readonly': 'Anda hanya dapat memantau laporan — pencatatan dilakukan oleh Bendahara.',
     'yys.trs.by': 'Dicatat oleh',
 
+    'yys.nav.people': 'Siswa, Guru & Ortu',
+    'yys.ppl.title': 'Data Siswa, Guru & Orang Tua',
+    'yys.ppl.sub': 'Pantauan seluruh sekolah/pondok naungan — hanya lihat, pengelolaan data oleh admin masing-masing sekolah',
+    'yys.ppl.school': 'Sekolah / Pondok',
+    'yys.ppl.allSchools': 'Semua sekolah/pondok',
+    'yys.ppl.children': 'Anak',
+    'yys.ppl.class': 'Kelas',
+
     'yys.nav.accounts': 'Akun Pengurus',
     'yys.acc.title': 'Akun Pengurus Lembaga',
     'yys.acc.sub': 'Kelola akun sesuai jabatan — kapasitas fitur mengikuti tugasnya',
@@ -134,7 +142,9 @@ function jabatanOf(ctx) {
   return Store.get('users', ctx.session.userId)?.fndRole || 'admin';
 }
 const isMasterAdmin = (ctx) => jabatanOf(ctx) === 'admin';
-const canRecordFinance = (ctx) => ['admin', 'bendahara'].includes(jabatanOf(ctx));
+/* Pencatatan kas HANYA oleh Bendahara — Master Admin, Ketua, dan
+   Sekretaris murni memantau laporan tanpa bisa mengubah. */
+const canRecordFinance = (ctx) => jabatanOf(ctx) === 'bendahara';
 
 function adminOnlyNotice(container) {
   container.append(UI.emptyState(t('yys.acc.adminOnly'), '🔒'));
@@ -294,9 +304,11 @@ export default {
      kebendaharaan; ketua/sekretaris hanya menu pantauan. */
   navGroups(ctx) {
     const jab = jabatanOf(ctx);
+    const pemantau = ['admin', 'ketua', 'sekretaris'].includes(jab);
     const items = [
       { route: 'dashboard', icon: '📊', label: 'nav.dashboard' },
       ...(jab === 'admin' ? [{ route: 'schools', icon: '🏫', label: 'yys.nav.schools' }] : []),
+      ...(pemantau ? [{ route: 'people', icon: '🎓', label: 'yys.nav.people' }] : []),
       { route: 'academic', icon: '📚', label: 'yys.nav.academic' },
       { route: 'finance', icon: '💰', label: 'yys.nav.finance' },
       { route: 'treasury', icon: '💵', label: 'yys.nav.treasury' },
@@ -341,6 +353,83 @@ export default {
             onRowClick: (tn) => schoolDrawer(tn, ctx, () => ctx.rerender()),
           }),
         ),
+      );
+    },
+
+    /* ---------- Direktori siswa/guru/ortu seluruh naungan (hanya lihat) ----------
+       Tidak ada tombol tambah/ubah/hapus di sini — pengelolaan data siswa,
+       guru, dan wali hanya dilakukan oleh admin sekolah masing-masing. */
+    people(container, ctx) {
+      const jab = jabatanOf(ctx);
+      if (!['admin', 'ketua', 'sekretaris'].includes(jab)) { adminOnlyNotice(container); return; }
+
+      const schools = mySchools(ctx);
+      const tids = schools.map((tn) => tn.id);
+      const schoolName = (tid) => schools.find((tn) => tn.id === tid)?.name || '—';
+      const schoolChip = (tid) => UI.chip(schoolName(tid), 'info');
+
+      let tab = 'students';
+      let schoolFilter = 'all';
+      const inScope = (tid) => tids.includes(tid) && (schoolFilter === 'all' || tid === schoolFilter);
+
+      const host = el('div', { style: { marginTop: 'var(--s-3)' } });
+
+      const renderTab = () => {
+        clear(host);
+        if (tab === 'students') {
+          const rows = Store.list('students', (s) => inScope(s.tenantId));
+          host.append(UI.dataTable({
+            columns: [
+              { label: t('common.name'), render: (s) => el('div', { class: 'row', style: { gap: '10px', flexWrap: 'nowrap' } }, UI.avatar(s.name), s.name) },
+              { label: 'NIS', render: (s) => el('span', { class: 'mono small' }, s.nis || '—') },
+              { label: t('yys.ppl.class'), render: (s) => Store.get('classes', s.classId)?.name || '—' },
+              { label: t('yys.ppl.school'), render: (s) => schoolChip(s.tenantId) },
+              { label: t('common.status'), render: (s) => UI.statusChip(s.status) },
+            ],
+            rows,
+          }));
+        } else if (tab === 'teachers') {
+          const rows = Store.list('users', (u) => u.role === 'teacher' && inScope(u.tenantId));
+          host.append(UI.dataTable({
+            columns: [
+              { label: t('common.name'), render: (u) => el('div', { class: 'row', style: { gap: '10px', flexWrap: 'nowrap' } }, UI.avatar(u.name), u.name) },
+              { label: 'HP', render: (u) => u.phone || '—' },
+              { label: t('adm.field.staffRoles'), render: (u) => el('div', { class: 'row', style: { gap: '4px', flexWrap: 'wrap' } }, (u.staffRoles || []).map((r) => UI.chip(r))) },
+              { label: t('yys.ppl.school'), render: (u) => schoolChip(u.tenantId) },
+            ],
+            rows,
+          }));
+        } else {
+          const rows = Store.list('users', (u) => u.role === 'guardian' && inScope(u.tenantId));
+          host.append(UI.dataTable({
+            columns: [
+              { label: t('common.name'), render: (u) => el('div', { class: 'row', style: { gap: '10px', flexWrap: 'nowrap' } }, UI.avatar(u.name), u.name) },
+              { label: t('adm.field.relation'), render: (u) => UI.chip(u.relation || 'wali') },
+              { label: 'HP', render: (u) => u.phone || '—' },
+              { label: t('yys.ppl.children'), render: (u) => (u.childIds || []).map((id) => Store.get('students', id)?.name).filter(Boolean).join(', ') || '—' },
+              { label: t('yys.ppl.school'), render: (u) => schoolChip(u.tenantId) },
+            ],
+            rows,
+          }));
+        }
+      };
+
+      const schoolSel = UI.select([
+        { value: 'all', label: t('yys.ppl.allSchools') },
+        ...schools.map((tn) => ({ value: tn.id, label: tn.name })),
+      ]);
+      schoolSel.addEventListener('change', () => { schoolFilter = schoolSel.value; renderTab(); });
+
+      renderTab();
+      container.append(
+        UI.pageHead(t('yys.ppl.title'), t('yys.ppl.sub')),
+        el('div', { class: 'filterbar' }, el('span', { class: 'muted small' }, t('yys.ppl.school')), schoolSel),
+        UI.tabs([
+          { id: 'students', label: `🎓 ${t('nav.students')}` },
+          { id: 'teachers', label: `👳 ${t('nav.teachers')}` },
+          { id: 'guardians', label: `👨‍👩‍👧 ${t('nav.guardians')}` },
+        ], tab, (id) => { tab = id; renderTab(); }),
+        host,
       );
     },
 

@@ -1,5 +1,5 @@
 /* Service worker — app shell cache agar aplikasi ringan & bisa dibuka offline. */
-const CACHE = 'pondokone-v4';
+const CACHE = 'pondokone-v5';
 const SHELL = [
   './',
   './index.html',
