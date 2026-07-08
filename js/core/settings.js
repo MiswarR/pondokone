@@ -186,7 +186,7 @@ const SECTIONS = {
     );
   },
 
-  branding(session) {
+  branding(session, rerender) {
     const tenant = session.tenantId ? Store.get('tenants', session.tenantId) : null;
     if (!tenant) {
       return el('div', { class: 'panel' }, el('p', { class: 'muted' }, 'Branding diatur per tenant. Pilih tenant di modul Tenant.'));
@@ -194,17 +194,81 @@ const SECTIONS = {
     const nameIn = input({ value: tenant.name });
     const colorIn = el('input', { type: 'color', value: tenant.accentColor || '#2f7bff', style: { width: '64px', height: '38px', padding: '2px' } });
     const langSel = select(getLangs().map((l) => ({ value: l.code, label: l.label, selected: l.code === (tenant.defaultLang || 'id') })));
+
+    /* Logo sekolah — diunggah admin, dipakai sebagai ikon aplikasi & logo sidebar
+       untuk seluruh akun di bawah sekolah ini (admin, guru, orang tua). */
+    let logoDataUrl = tenant.logoDataUrl || null;
+    const preview = el('div', {
+      style: {
+        width: '72px', height: '72px', borderRadius: '16px', border: '1px solid var(--line)',
+        display: 'grid', placeItems: 'center', overflow: 'hidden', background: 'var(--accent-soft)',
+        fontSize: '1.6rem', fontWeight: 700,
+      },
+    });
+    const renderPreview = () => {
+      preview.innerHTML = '';
+      if (logoDataUrl) preview.append(el('img', { src: logoDataUrl, alt: 'Logo', style: { width: '100%', height: '100%', objectFit: 'cover' } }));
+      else preview.append(tenant.name.slice(0, 1));
+    };
+    renderPreview();
+
+    const fileIn = el('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
+    fileIn.addEventListener('change', () => {
+      const f = fileIn.files?.[0];
+      if (!f) return;
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = () => { img.src = reader.result; };
+      img.onload = () => {
+        /* Perkecil ke 256px agar ringan disimpan & cepat dimuat */
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const g = canvas.getContext('2d');
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        g.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        logoDataUrl = canvas.toDataURL('image/png');
+        renderPreview();
+      };
+      reader.readAsDataURL(f);
+    });
+
     return el('div', { class: 'panel', style: { maxWidth: '560px' } },
+      el('p', { class: 'muted small' },
+        '🎨 Logo & warna di sini menjadi identitas aplikasi untuk SELURUH akun sekolah ini — admin, guru, dan orang tua. Tidak memengaruhi tampilan Web Master maupun yayasan.'),
       field('Nama instansi', nameIn),
-      field('Warna aksen instansi', colorIn),
+      el('div', { class: 'field' },
+        el('label', {}, 'Logo sekolah / pondok (ikon aplikasi)'),
+        el('div', { class: 'row', style: { gap: '14px', alignItems: 'center' } },
+          preview,
+          el('div', { class: 'stack', style: { gap: '6px' } },
+            el('button', { class: 'btn sm', onclick: () => fileIn.click() }, '📁 Pilih gambar…'),
+            logoRemoveBtn(),
+          ),
+        ),
+        el('div', { class: 'hint' }, 'PNG/JPG persegi disarankan. Otomatis diperkecil ke 256×256.'),
+        fileIn,
+      ),
+      field('Warna aksen instansi', colorIn, 'Warna tombol, tautan, dan sorotan di seluruh aplikasi sekolah ini.'),
       field('Bahasa default tenant', langSel, 'User tetap dapat memilih bahasa pribadinya sendiri.'),
       el('button', {
         class: 'btn primary',
         onclick: () => {
-          Store.update('tenants', tenant.id, { name: nameIn.value, accentColor: colorIn.value, defaultLang: langSel.value }, session.userId);
+          Store.update('tenants', tenant.id, {
+            name: nameIn.value, accentColor: colorIn.value, defaultLang: langSel.value, logoDataUrl,
+          }, session.userId);
           toast(t('common.saved'), 'ok');
+          rerender?.(); /* terapkan warna & logo baru seketika */
         },
       }, t('common.save')),
     );
+
+    function logoRemoveBtn() {
+      return el('button', {
+        class: 'btn ghost sm',
+        onclick: () => { logoDataUrl = null; fileIn.value = ''; renderPreview(); },
+      }, '🗑 Hapus logo');
+    }
   },
 };

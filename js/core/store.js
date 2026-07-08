@@ -5,7 +5,7 @@
    dan agar mudah ditukar dengan REST API /v1 di produksi.
    ============================================================ */
 
-const LS_KEY = 'po.db.v1';
+const LS_KEY = 'po.db.v2'; // v2: entitas yayasan (foundations) + invoice SaaS per yayasan
 const DRAFT_KEY = 'po.drafts.v1';
 
 let db = null;
@@ -38,7 +38,7 @@ export function resetDemo() {
 }
 
 /* ---------- CRUD generik ---------- */
-const AUDITED = new Set(['gradeEntries', 'behaviorEvents', 'bills', 'payments', 'saasInvoices', 'tenants', 'students', 'users']);
+const AUDITED = new Set(['gradeEntries', 'behaviorEvents', 'bills', 'payments', 'saasInvoices', 'tenants', 'students', 'users', 'foundations']);
 
 export function list(name, filterFn) {
   const col = load()[name] || [];
@@ -220,6 +220,25 @@ function daysAhead(n) {
 function buildSeed() {
   const T1 = 'ten_alhikmah';
   const T2 = 'ten_cahaya';
+  const T3 = 'ten_smpit';
+  const F1 = 'fnd_alhikmah';
+  const F2 = 'fnd_cahaya';
+
+  /* --- Lembaga / Yayasan (menaungi satu atau beberapa sekolah/pondok) --- */
+  const foundations = [
+    {
+      id: F1, name: 'Yayasan Pendidikan Al-Hikmah', code: 'yph-alhikmah',
+      chairman: 'KH. Mahmud Baidhowi', profile: 'Yayasan yang menaungi pendidikan pesantren dan sekolah Islam terpadu sejak 1998.',
+      address: 'Jl. Raya Pesantren No. 12, Bogor', phone: '0251-777888', email: 'yayasan@alhikmah.or.id',
+      logoDataUrl: null, subscriptionStatus: 'active',
+    },
+    {
+      id: F2, name: 'Yayasan Cahaya Ilmu Nusantara', code: 'ycin',
+      chairman: 'Dr. H. Rahmat Hidayat', profile: 'Yayasan pendidikan dasar Islam di wilayah Depok.',
+      address: 'Jl. Melati No. 8, Depok', phone: '021-555444', email: 'yayasan@cahayailmu.or.id',
+      logoDataUrl: null, subscriptionStatus: 'trial',
+    },
+  ];
 
   /* --- Kelas, halaqah, kamar, mapel --- */
   const classes = [
@@ -227,6 +246,7 @@ function buildSeed() {
     { id: 'cls_7b', tenantId: T1, name: 'Kelas 7B', level: 'SMP', homeroomId: 'usr_guru2', capacity: 28, status: 'active' },
     { id: 'cls_8a', tenantId: T1, name: 'Kelas 8A', level: 'SMP', homeroomId: 'usr_guru3', capacity: 30, status: 'active' },
     { id: 'cls_c1', tenantId: T2, name: 'Kelas 1 Ibnu Sina', level: 'SD', homeroomId: null, capacity: 25, status: 'active' },
+    { id: 'cls_s7', tenantId: T3, name: 'Kelas 7 Ar-Razi', level: 'SMP', homeroomId: 'usr_guru4', capacity: 30, status: 'active' },
   ];
   const halaqahs = [
     { id: 'hlq_umar', tenantId: T1, name: 'Halaqah Umar bin Khattab', musyrifId: 'usr_guru1', target: 'Juz 30 + Juz 29', schedule: 'Ba’da Subuh & Maghrib' },
@@ -285,12 +305,29 @@ function buildSeed() {
     id: 'std_c1', tenantId: T2, nis: '2026101', name: 'Alya Kirana', gender: 'P',
     classId: 'cls_c1', halaqahId: null, roomId: null, guardianIds: [], birthDate: '2018-03-02', status: 'active',
   });
+  /* Siswa SMP IT Al-Hikmah (sekolah kedua di bawah Yayasan Al-Hikmah) */
+  [['std_s1', 'Raihan Akbar', 'L'], ['std_s2', 'Nabila Husna', 'P'], ['std_s3', 'Farhan Maulana', 'L'], ['std_s4', 'Zahra Aulia', 'P']].forEach(([id, name, gender], i) => {
+    students.push({
+      id, tenantId: T3, nis: `2026S0${i + 1}`, name, gender,
+      classId: 'cls_s7', halaqahId: null, roomId: null, guardianIds: [], birthDate: `2013-0${(i % 9) + 1}-1${i + 1}`, status: 'active',
+    });
+  });
 
   /* --- Users --- */
   const users = [
     { id: 'usr_master', tenantId: null, role: 'master', name: 'Pusat PondokOne', identifier: 'master@pondokone.id', email: 'master@pondokone.id', phone: '0811000001', password: 'master123', status: 'active' },
+    /* Master Admin lembaga/yayasan — melihat seluruh sekolah naungannya */
+    { id: 'usr_yayasan1', tenantId: null, foundationId: F1, role: 'foundation_admin', name: 'KH. Mahmud Baidhowi', identifier: 'yayasan@alhikmah.or.id', email: 'yayasan@alhikmah.or.id', phone: '0811000010', password: 'yayasan123', status: 'active' },
+    { id: 'usr_yayasan2', tenantId: null, foundationId: F2, role: 'foundation_admin', name: 'Dr. H. Rahmat Hidayat', identifier: 'yayasan@cahayailmu.or.id', email: 'yayasan@cahayailmu.or.id', phone: '0811000011', password: 'yayasan123', status: 'active' },
     { id: 'usr_admin1', tenantId: T1, role: 'admin', name: 'H. Syamsul Arifin', identifier: 'admin@alhikmah.sch.id', email: 'admin@alhikmah.sch.id', phone: '0811000002', password: 'admin123', status: 'active' },
     { id: 'usr_admin2', tenantId: T2, role: 'admin', name: 'Dewi Lestari, S.Pd', identifier: 'admin@cahayailmu.sch.id', email: 'admin@cahayailmu.sch.id', phone: '0811000003', password: 'admin123', status: 'active' },
+    { id: 'usr_admin3', tenantId: T3, role: 'admin', name: 'Ust. Fahmi Ramadhan, M.Pd', identifier: 'admin@smpit-alhikmah.sch.id', email: 'admin@smpit-alhikmah.sch.id', phone: '0811000004', password: 'admin123', status: 'active' },
+    {
+      id: 'usr_guru4', tenantId: T3, role: 'teacher', name: 'Ibu Laila Fitriani, S.Pd', identifier: 'laila@smpit-alhikmah.sch.id',
+      email: 'laila@smpit-alhikmah.sch.id', phone: '0812000004', password: 'guru123', status: 'active',
+      staffRoles: ['guru', 'wali_kelas'],
+      classIds: ['cls_s7'], halaqahIds: [], subjectIds: [], roomIds: [],
+    },
     {
       id: 'usr_guru1', tenantId: T1, role: 'teacher', name: 'Ust. Abdurrahman Hakim', identifier: 'ustadz@alhikmah.sch.id',
       email: 'ustadz@alhikmah.sch.id', phone: '0812000001', password: 'guru123', status: 'active',
@@ -471,46 +508,58 @@ function buildSeed() {
   ];
   const tenants = [
     {
-      id: T1, name: 'Ponpes Al-Hikmah', code: 'alhikmah', type: 'gabungan',
+      id: T1, foundationId: F1, name: 'Ponpes Al-Hikmah', code: 'alhikmah', type: 'gabungan',
       subdomain: 'alhikmah.pondokone.id', planId: 'pln_std',
       modules: ['akademik', 'hafalan', 'perilaku', 'keuangan', 'notifikasi'],
       studentQuota: 300, activeStudents: 12,
       adminName: 'H. Syamsul Arifin', adminEmail: 'admin@alhikmah.sch.id', adminPhone: '0811000002',
       subscriptionStatus: 'active',
       address: 'Jl. Raya Pesantren No. 12, Bogor', phone: '0251-777888', email: 'info@alhikmah.sch.id',
-      accentColor: '#2f7bff', defaultLang: 'id',
+      accentColor: '#2f7bff', logoDataUrl: null, defaultLang: 'id',
     },
     {
-      id: T2, name: 'SDIT Cahaya Ilmu', code: 'cahayailmu', type: 'sekolah',
+      id: T3, foundationId: F1, name: 'SMP IT Al-Hikmah', code: 'smpit-alhikmah', type: 'sekolah',
+      subdomain: 'smpit-alhikmah.pondokone.id', planId: 'pln_basic',
+      modules: ['akademik', 'perilaku', 'keuangan'],
+      studentQuota: 120, activeStudents: 4,
+      adminName: 'Ust. Fahmi Ramadhan, M.Pd', adminEmail: 'admin@smpit-alhikmah.sch.id', adminPhone: '0811000004',
+      subscriptionStatus: 'active',
+      address: 'Jl. Raya Pesantren No. 14, Bogor', phone: '0251-777889', email: 'info@smpit-alhikmah.sch.id',
+      accentColor: '#8b5cf6', logoDataUrl: null, defaultLang: 'id',
+    },
+    {
+      id: T2, foundationId: F2, name: 'SDIT Cahaya Ilmu', code: 'cahayailmu', type: 'sekolah',
       subdomain: 'cahayailmu.pondokone.id', planId: 'pln_basic',
       modules: ['akademik', 'keuangan'],
       studentQuota: 150, activeStudents: 1,
       adminName: 'Dewi Lestari, S.Pd', adminEmail: 'admin@cahayailmu.sch.id', adminPhone: '0811000003',
       subscriptionStatus: 'trial',
       address: 'Jl. Melati No. 8, Depok', phone: '021-555444', email: 'info@cahayailmu.sch.id',
-      accentColor: '#2ecc8f', defaultLang: 'id',
+      accentColor: '#2ecc8f', logoDataUrl: null, defaultLang: 'id',
     },
   ];
+  /* Invoice SaaS ditagihkan ke YAYASAN (bukan per sekolah) —
+     item dirinci tanpa menyebut nama sekolah, total siswa = agregat seluruh naungan. */
   const saasInvoices = [
     {
-      id: 'sin_001', tenantId: T1, number: 'INV-SAAS-2606-001', period: 'Juni 2026',
+      id: 'sin_001', foundationId: F1, number: 'INV-SAAS-2606-001', period: 'Juni 2026',
       items: [
-        { label: 'Standard base fee', amount: 1000000 },
-        { label: 'Per siswa aktif (12 × Rp4.000)', amount: 48000 },
+        { label: 'Biaya dasar paket (2 sekolah/pondok)', amount: 1500000 },
+        { label: 'Per santri/siswa aktif (16 santri)', amount: 60000 },
       ],
-      total: 1048000, status: 'paid', dueDate: daysAgo(20), paidAt: daysAgo(18),
+      total: 1560000, status: 'paid', dueDate: daysAgo(20), paidAt: daysAgo(18),
     },
     {
-      id: 'sin_002', tenantId: T1, number: 'INV-SAAS-2607-001', period: 'Juli 2026',
+      id: 'sin_002', foundationId: F1, number: 'INV-SAAS-2607-001', period: 'Juli 2026',
       items: [
-        { label: 'Standard base fee', amount: 1000000 },
-        { label: 'Per siswa aktif (12 × Rp4.000)', amount: 48000 },
+        { label: 'Biaya dasar paket (2 sekolah/pondok)', amount: 1500000 },
+        { label: 'Per santri/siswa aktif (16 santri)', amount: 60000 },
       ],
-      total: 1048000, status: 'sent', dueDate: daysAhead(10), paidAt: null,
+      total: 1560000, status: 'sent', dueDate: daysAhead(10), paidAt: null,
     },
     {
-      id: 'sin_003', tenantId: T2, number: 'INV-SAAS-2607-002', period: 'Juli 2026',
-      items: [{ label: 'Basic base fee (trial berakhir)', amount: 500000 }],
+      id: 'sin_003', foundationId: F2, number: 'INV-SAAS-2607-002', period: 'Juli 2026',
+      items: [{ label: 'Biaya dasar paket — trial berakhir (1 sekolah)', amount: 500000 }],
       total: 500000, status: 'overdue', dueDate: daysAgo(3), paidAt: null,
     },
   ];
@@ -545,7 +594,7 @@ function buildSeed() {
   ];
 
   return {
-    plans, tenants, saasInvoices, users, students, classes, halaqahs, rooms, subjects,
+    foundations, plans, tenants, saasInvoices, users, students, classes, halaqahs, rooms, subjects,
     academicYears, semesters, gradeComponents, behaviorRules,
     attendanceSessions, memorizationRecords, memorizationTargets,
     gradeEntries, behaviorEvents,
@@ -559,6 +608,19 @@ export const ATT_STATUSES = ['hadir', 'izin', 'sakit', 'alfa', 'terlambat'];
 
 export function studentsOf(tenantId) { return list('students', (s) => s.tenantId === tenantId); }
 export function childrenOf(guardian) { return (guardian.childIds || []).map((id) => get('students', id)).filter(Boolean); }
+
+/* ---------- Yayasan / lembaga ---------- */
+export function tenantsOfFoundation(foundationId) {
+  return list('tenants', (tn) => tn.foundationId === foundationId);
+}
+export function studentsOfFoundation(foundationId) {
+  const tids = tenantsOfFoundation(foundationId).map((tn) => tn.id);
+  return list('students', (s) => tids.includes(s.tenantId) && s.status === 'active');
+}
+export function teachersOfFoundation(foundationId) {
+  const tids = tenantsOfFoundation(foundationId).map((tn) => tn.id);
+  return list('users', (u) => u.role === 'teacher' && tids.includes(u.tenantId));
+}
 
 export function unitsOf(teacher) {
   const cls = (teacher.classIds || []).map((id) => ({ ...get('classes', id), unitType: 'class' }));

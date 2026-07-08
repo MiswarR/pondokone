@@ -48,9 +48,21 @@ I18n.extend({
     'mst.tenants.adminPhone': 'No. HP Admin',
     'mst.tenants.subStatus': 'Status Langganan',
     'mst.tenants.profile': 'Profil Tenant',
-    'mst.tenants.invoices': 'Invoice Tenant Ini',
+    'mst.tenants.invoices': 'Invoice SaaS (via yayasan induk)',
     'mst.tenants.address': 'Alamat',
     'mst.tenants.contact': 'Kontak',
+
+    'mst.fnd.nav': 'Yayasan / Lembaga',
+    'mst.fnd.title': 'Manajemen Yayasan / Lembaga',
+    'mst.fnd.sub': 'Lembaga induk yang menaungi sekolah & pondok — penagihan SaaS per yayasan',
+    'mst.fnd.add': 'Tambah Yayasan',
+    'mst.fnd.edit': 'Ubah Yayasan',
+    'mst.fnd.chairman': 'Ketua yayasan',
+    'mst.fnd.schools': 'Sekolah/Pondok naungan',
+    'mst.fnd.students': 'Total Santri/Siswa',
+    'mst.fnd.adminEmail': 'Email Master Admin',
+    'mst.fnd.initialPw': 'Kata sandi awal Master Admin',
+    'mst.fnd.invoices': 'Invoice yayasan ini',
 
     'mst.type.sekolah': 'Sekolah',
     'mst.type.pesantren': 'Pesantren',
@@ -75,10 +87,14 @@ I18n.extend({
     'mst.plans.usedBy': 'Dipakai {n} tenant',
 
     'mst.inv.title': 'Invoice SaaS',
-    'mst.inv.sub': 'Penagihan langganan ke seluruh tenant',
+    'mst.inv.sub': 'Penagihan langganan per yayasan/lembaga — agregat seluruh sekolah naungan',
     'mst.inv.generate': 'Generate Invoice',
     'mst.inv.number': 'Nomor',
     'mst.inv.tenant': 'Tenant',
+    'mst.inv.foundation': 'Yayasan / Lembaga',
+    'mst.inv.baseAgg': 'Biaya dasar paket ({n} sekolah/pondok)',
+    'mst.inv.perStudentAgg': 'Per santri/siswa aktif ({n} santri/siswa)',
+    'mst.inv.totalStudents': 'Total santri/siswa aktif',
     'mst.inv.send': 'Kirim',
     'mst.inv.markPaid': 'Tandai Lunas',
     'mst.inv.items': 'Rincian',
@@ -145,8 +161,17 @@ function isoAhead(n) {
 }
 
 const tenantName = (id) => Store.get('tenants', id)?.name || id || '—';
+const foundationName = (id) => Store.get('foundations', id)?.name || id || '—';
 const planOf = (tn) => (tn ? Store.get('plans', tn.planId) : null);
 const userName = (id) => Store.get('users', id)?.name || id || 'system';
+/* Agregat yayasan: jumlah sekolah & total siswa aktif seluruh naungan */
+function foundationAgg(fid) {
+  const schools = Store.tenantsOfFoundation(fid);
+  return {
+    schools,
+    students: Store.studentsOfFoundation(fid).length,
+  };
+}
 
 function kv(label, value) {
   return el('div', { class: 'row between', style: { padding: '4px 0', gap: 'var(--s-3)' } },
@@ -234,6 +259,7 @@ function tenantForm(existing, ctx, afterSave) {
     fields: [
       { key: 'name', label: t('common.name'), required: true },
       { key: 'code', label: t('mst.tenants.code'), required: true },
+      { key: 'foundationId', label: t('mst.fnd.nav'), type: 'select', required: true, options: Store.list('foundations').map((f) => ({ value: f.id, label: f.name })) },
       { key: 'type', label: t('mst.tenants.type'), type: 'select', options: TENANT_TYPES.map((v) => ({ value: v, label: t(`mst.type.${v}`) })) },
       { key: 'subdomain', label: t('mst.tenants.subdomain'), hint: 'contoh: namatenant.pondokone.id' },
       { key: 'planId', label: t('mst.tenants.plan'), type: 'select', options: Store.list('plans').map((p) => ({ value: p.id, label: p.name })) },
@@ -257,7 +283,8 @@ function tenantForm(existing, ctx, afterSave) {
 }
 
 function tenantDrawer(tn, ctx, refresh) {
-  const invs = Store.list('saasInvoices', (i) => i.tenantId === tn.id)
+  /* Invoice SaaS ditagihkan ke yayasan induk sekolah ini */
+  const invs = Store.list('saasInvoices', (i) => i.foundationId === tn.foundationId)
     .sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
   const d = UI.drawer({
     title: tn.name,
@@ -268,6 +295,7 @@ function tenantDrawer(tn, ctx, refresh) {
         UI.chip(planOf(tn)?.name || '—'),
       ),
       panel(t('mst.tenants.profile'),
+        kv(t('mst.fnd.nav'), foundationName(tn.foundationId)),
         kv(t('mst.tenants.code'), tn.code),
         kv(t('mst.tenants.subdomain'), tn.subdomain || '—'),
         kv(t('mst.tenants.quota'), `${tn.activeStudents ?? 0} / ${tn.studentQuota ?? 0}`),
@@ -332,10 +360,13 @@ function planForm(existing, ctx, afterSave) {
    INVOICES
    ============================================================ */
 function invoiceDetailModal(inv) {
+  const agg = foundationAgg(inv.foundationId);
   UI.modal({
     title: `${t('mst.inv.title')} — ${inv.number}`,
     body: el('div', {},
-      kv(t('mst.inv.tenant'), tenantName(inv.tenantId)),
+      kv(t('mst.inv.foundation'), foundationName(inv.foundationId)),
+      kv(t('mst.fnd.schools'), String(agg.schools.length)),
+      kv(t('mst.inv.totalStudents'), String(agg.students)),
       kv(t('common.period'), inv.period),
       kv(t('common.dueDate'), fmtDate(inv.dueDate)),
       kv(t('common.status'), UI.statusChip(inv.status)),
@@ -352,22 +383,30 @@ function invoiceDetailModal(inv) {
 }
 
 function generateInvoiceModal(ctx, afterSave) {
-  const tenants = Store.list('tenants').filter((tn) => tn.subscriptionStatus !== 'closed');
-  const selTenant = UI.select(tenants.map((tn) => ({ value: tn.id, label: tn.name })));
+  /* Penagihan per YAYASAN: biaya = jumlah paket seluruh sekolah naungan +
+     biaya per siswa agregat. Rincian TIDAK menyebut nama sekolah. */
+  const foundations = Store.list('foundations', (f) => f.subscriptionStatus !== 'closed');
+  const selFnd = UI.select(foundations.map((f) => ({ value: f.id, label: f.name })));
   const inpPeriod = UI.input({ value: currentPeriod() });
   const preview = el('div', {});
 
   const compute = () => {
-    const tn = Store.get('tenants', selTenant.value);
-    const plan = planOf(tn) || {};
-    const base = plan.monthlyBase || 0;
-    const perTotal = (plan.perStudent || 0) * (tn?.activeStudents || 0);
+    const fid = selFnd.value;
+    const schools = Store.tenantsOfFoundation(fid).filter((tn) => tn.subscriptionStatus !== 'closed');
+    let base = 0, perTotal = 0, students = 0, maxGrace = 14;
+    for (const tn of schools) {
+      const plan = planOf(tn) || {};
+      base += plan.monthlyBase || 0;
+      perTotal += (plan.perStudent || 0) * (tn.activeStudents || 0);
+      students += tn.activeStudents || 0;
+      maxGrace = Math.max(maxGrace, plan.graceDays || 14);
+    }
     return {
-      tn,
-      plan,
+      fid,
+      graceDays: maxGrace,
       items: [
-        { label: t('mst.inv.baseItem', { plan: plan.name || '—' }), amount: base },
-        { label: t('mst.inv.perStudentItem', { n: tn?.activeStudents || 0, fee: fmtMoney(plan.perStudent || 0) }), amount: perTotal },
+        { label: t('mst.inv.baseAgg', { n: schools.length }), amount: base },
+        { label: t('mst.inv.perStudentAgg', { n: students }), amount: perTotal },
       ],
       total: base + perTotal,
     };
@@ -383,13 +422,13 @@ function generateInvoiceModal(ctx, afterSave) {
       ),
     );
   };
-  selTenant.addEventListener('change', renderPreview);
+  selFnd.addEventListener('change', renderPreview);
   renderPreview();
 
   const m = UI.modal({
     title: t('mst.inv.generate'),
     body: el('div', {},
-      UI.field(t('mst.inv.tenant'), selTenant),
+      UI.field(t('mst.inv.foundation'), selFnd),
       UI.field(t('common.period'), inpPeriod),
       el('div', { class: 'panel' }, preview),
     ),
@@ -399,15 +438,15 @@ function generateInvoiceModal(ctx, afterSave) {
         class: 'btn primary',
         onclick: () => {
           const c = compute();
-          if (!c.tn) return;
+          if (!c.fid) return;
           Store.insert('saasInvoices', {
-            tenantId: c.tn.id,
+            foundationId: c.fid,
             number: `INV-SAAS-${Date.now().toString().slice(-8)}`,
             period: inpPeriod.value.trim() || currentPeriod(),
             items: c.items,
             total: c.total,
             status: 'draft',
-            dueDate: isoAhead(c.plan.graceDays || 14),
+            dueDate: isoAhead(c.graceDays),
             paidAt: null,
           }, ctx.session.userId);
           m.close();
@@ -416,6 +455,84 @@ function generateInvoiceModal(ctx, afterSave) {
         },
       }, t('common.save')),
     ],
+  });
+}
+
+/* ============================================================
+   YAYASAN / LEMBAGA
+   ============================================================ */
+function foundationForm(existing, ctx, afterSave) {
+  formModal({
+    title: existing ? t('mst.fnd.edit') : t('mst.fnd.add'),
+    record: existing || {},
+    fields: [
+      { key: 'name', label: t('common.name'), required: true },
+      { key: 'code', label: t('mst.tenants.code'), required: true },
+      { key: 'chairman', label: t('mst.fnd.chairman') },
+      { key: 'address', label: t('mst.tenants.address') },
+      { key: 'phone', label: t('mst.tenants.adminPhone') },
+      ...(existing ? [] : [
+        { key: 'adminEmail', label: t('mst.fnd.adminEmail'), type: 'email', hint: 'Akun Master Admin yayasan dibuat otomatis' },
+        { key: 'adminPw', label: t('mst.fnd.initialPw'), type: 'password', hint: 'Min. 6 karakter' },
+      ]),
+      { key: 'subscriptionStatus', label: t('mst.tenants.subStatus'), type: 'select', options: SUB_STATUSES.map((v) => ({ value: v, label: t(`status.${v}`) })) },
+    ],
+    onSave(values) {
+      const { adminEmail, adminPw, ...data } = values;
+      if (existing) {
+        Store.update('foundations', existing.id, data, ctx.session.userId);
+      } else {
+        if (adminEmail && (adminPw || '').length < 6) { UI.toast('Kata sandi Master Admin minimal 6 karakter', 'warn'); return; }
+        const f = Store.insert('foundations', { ...data, profile: '', email: adminEmail || null, logoDataUrl: null }, ctx.session.userId);
+        if (adminEmail) {
+          Store.insert('users', {
+            tenantId: null, foundationId: f.id, role: 'foundation_admin',
+            name: data.chairman || adminEmail, identifier: adminEmail, email: adminEmail,
+            phone: data.phone || null, password: adminPw, status: 'active',
+          }, ctx.session.userId);
+        }
+      }
+      UI.toast(t('common.saved'), 'ok');
+      afterSave?.();
+    },
+  });
+}
+
+function foundationDrawer(f, ctx, refresh) {
+  const agg = foundationAgg(f.id);
+  const invs = Store.list('saasInvoices', (i) => i.foundationId === f.id)
+    .sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
+  const d = UI.drawer({
+    title: f.name,
+    body: el('div', { class: 'stack', style: { padding: 'var(--s-4)', gap: 'var(--s-4)' } },
+      el('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } },
+        UI.statusChip(f.subscriptionStatus || 'active'),
+        UI.chip(`${agg.schools.length} ${t('mst.fnd.schools')}`, 'info'),
+        UI.chip(`${agg.students} ${t('mst.kpi.students')}`),
+      ),
+      panel(t('mst.fnd.schools'),
+        agg.schools.length
+          ? agg.schools.map((tn) => kv(tn.name, `${tn.activeStudents ?? 0} siswa · ${t(`mst.type.${tn.type}`)}`))
+          : el('span', { class: 'muted small' }, t('common.empty')),
+      ),
+      panel(t('mst.tenants.profile'),
+        kv(t('mst.fnd.chairman'), f.chairman || '—'),
+        kv(t('mst.tenants.address'), f.address || '—'),
+        kv(t('mst.tenants.contact'), [f.phone, f.email].filter(Boolean).join(' · ') || '—'),
+      ),
+      panel(t('mst.fnd.invoices'),
+        UI.dataTable({
+          columns: [
+            { label: t('mst.inv.number'), render: (r) => el('span', { class: 'mono small' }, r.number) },
+            { label: t('common.period'), key: 'period' },
+            { label: t('common.total'), render: (r) => fmtMoney(r.total) },
+            { label: t('common.status'), render: (r) => UI.statusChip(r.status) },
+          ],
+          rows: invs,
+        }),
+      ),
+      el('button', { class: 'btn primary', onclick: () => { d.close(); foundationForm(f, ctx, refresh); } }, `✏️ ${t('common.edit')}`),
+    ),
   });
 }
 
@@ -431,6 +548,7 @@ export default {
     {
       items: [
         { route: 'dashboard', icon: '📊', label: 'nav.dashboard' },
+        { route: 'foundations', icon: '🏛️', label: 'mst.fnd.nav' },
         { route: 'tenants', icon: '🏫', label: 'nav.tenants' },
         { route: 'plans', icon: '📦', label: 'nav.plans' },
         { route: 'invoices', icon: '🧾', label: 'nav.invoices' },
@@ -482,7 +600,7 @@ export default {
             ? UI.timeline([
               ...overdueInvs.map((i) => ({
                 when: fmtDate(i.dueDate),
-                what: `${t('mst.notif.overdueInv')} — ${tenantName(i.tenantId)}`,
+                what: `${t('mst.notif.overdueInv')} — ${foundationName(i.foundationId)}`,
                 detail: `${i.number} · ${fmtMoney(i.total)}`,
                 tone: 'danger',
               })),
@@ -498,6 +616,31 @@ export default {
       );
     },
 
+    /* ---------- Yayasan / Lembaga ---------- */
+    foundations(container, ctx) {
+      const host = el('div');
+      const renderList = () => {
+        clear(host);
+        host.append(UI.dataTable({
+          columns: [
+            { label: t('common.name'), render: (r) => el('strong', {}, r.name) },
+            { label: t('mst.fnd.chairman'), render: (r) => r.chairman || '—' },
+            { label: t('mst.fnd.schools'), render: (r) => String(foundationAgg(r.id).schools.length) },
+            { label: t('mst.fnd.students'), render: (r) => String(foundationAgg(r.id).students) },
+            { label: t('common.status'), render: (r) => UI.statusChip(r.subscriptionStatus || 'active') },
+          ],
+          rows: Store.list('foundations'),
+          onRowClick: (r) => foundationDrawer(r, ctx, renderList),
+        }));
+      };
+      renderList();
+      container.append(
+        UI.pageHead(t('mst.fnd.title'), t('mst.fnd.sub'),
+          el('button', { class: 'btn primary', onclick: () => foundationForm(null, ctx, renderList) }, `＋ ${t('mst.fnd.add')}`)),
+        host,
+      );
+    },
+
     /* ---------- Tenants ---------- */
     tenants(container, ctx) {
       const host = el('div');
@@ -507,6 +650,7 @@ export default {
         host.append(UI.dataTable({
           columns: [
             { label: t('common.name'), render: (r) => el('strong', {}, r.name) },
+            { label: t('mst.fnd.nav'), render: (r) => foundationName(r.foundationId) },
             { label: t('mst.tenants.code'), render: (r) => el('span', { class: 'mono small' }, r.code) },
             { label: t('mst.tenants.type'), render: (r) => t(`mst.type.${r.type}`) },
             { label: t('mst.tenants.plan'), render: (r) => planOf(r)?.name || '—' },
@@ -572,7 +716,9 @@ export default {
         host.append(UI.dataTable({
           columns: [
             { label: t('mst.inv.number'), render: (r) => el('span', { class: 'mono small' }, r.number) },
-            { label: t('mst.inv.tenant'), render: (r) => tenantName(r.tenantId) },
+            { label: t('mst.inv.foundation'), render: (r) => el('div', {},
+              el('strong', {}, foundationName(r.foundationId)),
+              el('div', { class: 'xs muted' }, `${foundationAgg(r.foundationId).students} ${t('mst.inv.totalStudents').toLowerCase()}`)) },
             { label: t('common.period'), key: 'period' },
             { label: t('common.total'), render: (r) => fmtMoney(r.total) },
             { label: t('common.dueDate'), render: (r) => fmtDate(r.dueDate) },

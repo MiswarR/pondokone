@@ -1,0 +1,9 @@
+# Jangan pernah publikasikan ke situs
+backend/
+*.apk
+*.aab
+*.keystore
+signing-key-info.txt
+apk-output/
+mahadone-apk.zip
+web/

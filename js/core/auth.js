@@ -11,12 +11,14 @@ import { el, field, input, toast } from './ui.js';
 /* Akun Web Master sengaja tidak ditampilkan di halaman publik.
    Login master tetap berfungsi dengan mengetik kredensial secara manual. */
 const DEMO_ACCOUNTS = [
+  { role: 'foundation_admin', portal: 'yayasan', id: 'yayasan@alhikmah.or.id', pw: 'yayasan123' },
   { role: 'admin', portal: 'admin', id: 'admin@alhikmah.sch.id', pw: 'admin123' },
   { role: 'teacher', portal: 'guru', id: 'ustadz@alhikmah.sch.id', pw: 'guru123' },
   { role: 'guardian', portal: 'ortu', id: 'wali@gmail.com', pw: 'wali123' },
 ];
 
 const PORTALS = [
+  { id: 'yayasan', icon: '🏛️', nameKey: 'auth.portal.yayasan', descKey: 'auth.portal.yayasanDesc' },
   { id: 'admin', icon: '🏫', nameKey: 'auth.portal.admin', descKey: 'auth.portal.adminDesc' },
   { id: 'guru', icon: '👳', nameKey: 'auth.portal.guru', descKey: 'auth.portal.guruDesc' },
   { id: 'ortu', icon: '👨‍👩‍👧', nameKey: 'auth.portal.ortu', descKey: 'auth.portal.ortuDesc' },

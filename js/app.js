@@ -22,12 +22,13 @@ import { renderAuth } from './core/auth.js';
 import { renderSettings, applyPrefs } from './core/settings.js';
 
 import masterPortal from './portals/master.js';
+import yayasanPortal from './portals/yayasan.js';
 import adminPortal from './portals/admin.js';
 import guruPortal from './portals/guru.js';
 import ortuPortal from './portals/ortu.js';
 
-const PORTALS = { master: masterPortal, admin: adminPortal, guru: guruPortal, ortu: ortuPortal };
-const ROLE_PORTAL = { master: 'master', admin: 'admin', teacher: 'guru', guardian: 'ortu' };
+const PORTALS = { master: masterPortal, yayasan: yayasanPortal, admin: adminPortal, guru: guruPortal, ortu: ortuPortal };
+const ROLE_PORTAL = { master: 'master', foundation_admin: 'yayasan', admin: 'admin', teacher: 'guru', guardian: 'ortu' };
 const SESSION_KEY = 'po.session';
 
 const app = document.getElementById('app');
@@ -35,9 +36,46 @@ let session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
 
 /* ---------- Sesi ---------- */
 function setSession(user) {
-  session = user ? { userId: user.id, role: user.role, tenantId: user.tenantId, name: user.name } : null;
+  session = user
+    ? { userId: user.id, role: user.role, tenantId: user.tenantId || null, foundationId: user.foundationId || null, name: user.name }
+    : null;
   if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   else localStorage.removeItem(SESSION_KEY);
+}
+
+/* ---------- Branding per sekolah ----------
+   Warna aksen + logo sekolah berlaku HANYA ke bawah (admin, guru, orang tua
+   sekolah tsb). Web Master dan admin yayasan tetap tampilan default platform. */
+const BRANDED_ROLES = ['admin', 'teacher', 'guardian'];
+
+export function applyBranding() {
+  const root = document.documentElement;
+  const tenant = session && BRANDED_ROLES.includes(session.role) && session.tenantId
+    ? Store.get('tenants', session.tenantId) : null;
+
+  const accent = tenant?.accentColor;
+  if (accent && /^#[0-9a-f]{6}$/i.test(accent)) {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-strong', `rgb(${Math.max(r - 30, 0)}, ${Math.max(g - 30, 0)}, ${Math.max(b - 30, 0)})`);
+    root.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.14)`);
+    root.style.setProperty('--accent-ink', `rgb(${Math.min(r + 90, 255)}, ${Math.min(g + 90, 255)}, ${Math.min(b + 90, 255)})`);
+  } else {
+    ['--accent', '--accent-strong', '--accent-soft', '--accent-ink'].forEach((v) => root.style.removeProperty(v));
+  }
+
+  const fav = document.querySelector('link[rel="icon"]');
+  if (fav) fav.href = tenant?.logoDataUrl || './assets/icon.svg';
+  document.title = tenant ? `${tenant.name} — ${t('app.name')}` : 'PondokOne — Platform Sekolah & Pesantren';
+}
+
+/* Logo brand: pakai logo sekolah bila ada, selain itu huruf pertama nama. */
+function brandLogo(tenant, fallbackName) {
+  if (tenant?.logoDataUrl) {
+    return el('div', { class: 'logo', style: { overflow: 'hidden', padding: 0 } },
+      el('img', { src: tenant.logoDataUrl, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover' } }));
+  }
+  return el('div', { class: 'logo' }, (fallbackName || 'P').slice(0, 1));
 }
 
 function logout() {
@@ -56,6 +94,7 @@ function parseHash() {
 
 function render() {
   applyDir();
+  applyBranding();
   const { portalId, route, params } = parseHash();
 
   if (!session) {
@@ -95,15 +134,17 @@ function render() {
 /* ---------- Shell web (sidebar) ---------- */
 function renderSidebarShell(portal, routeName, ctx) {
   const tenant = ctx.session.tenantId ? Store.get('tenants', ctx.session.tenantId) : null;
+  const foundation = ctx.session.foundationId ? Store.get('foundations', ctx.session.foundationId) : null;
+  const brandName = tenant?.name || foundation?.name || t('app.name');
   const content = el('div', { class: 'content' });
 
   const navItems = [];
   const sidebar = el('nav', { class: 'sidebar' },
     el('div', { class: 'brand' },
-      el('div', { class: 'logo' }, (tenant?.name || t('app.name')).slice(0, 1)),
+      brandLogo(tenant || foundation, brandName),
       el('div', {},
-        el('div', { class: 'name' }, tenant?.name || t('app.name')),
-        el('div', { class: 'sub' }, tenant ? t('app.name') : t('app.tagline')),
+        el('div', { class: 'name' }, brandName),
+        el('div', { class: 'sub' }, (tenant || foundation) ? t('app.name') : t('app.tagline')),
       ),
     ),
     portal.navGroups.map((group) => [
@@ -149,6 +190,7 @@ function renderSidebarShell(portal, routeName, ctx) {
 
 /* ---------- Shell mobile (bottom nav) ---------- */
 function renderMobileShell(portal, routeName, ctx) {
+  const tenant = ctx.session.tenantId ? Store.get('tenants', ctx.session.tenantId) : null;
   const content = el('div', { class: 'm-content' });
   const headerHost = el('div', { class: 'm-header' });
 
@@ -156,7 +198,7 @@ function renderMobileShell(portal, routeName, ctx) {
   ctx.setHeader = (node) => { clear(headerHost); headerHost.append(node); };
   ctx.setHeader(el('div', { class: 'row between' },
     el('div', {},
-      el('div', { class: 'xs muted' }, t('app.name')),
+      el('div', { class: 'xs muted' }, tenant?.name || t('app.name')),
       el('div', { style: { fontWeight: 700, fontSize: '1.05rem' } }, t(findNavLabel(portal, routeName))),
     ),
     el('div', { class: 'row', style: { gap: '10px' } }, notifBell(ctx), avatar(ctx.session.name)),
