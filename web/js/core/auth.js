@@ -12,6 +12,8 @@ import { el, field, input, toast } from './ui.js';
    Login master tetap berfungsi dengan mengetik kredensial secara manual. */
 const DEMO_ACCOUNTS = [
   { role: 'foundation_admin', portal: 'yayasan', id: 'yayasan@alhikmah.or.id', pw: 'yayasan123' },
+  { role: 'foundation_admin', portal: 'yayasan', id: 'bendahara@alhikmah.or.id', pw: 'bendahara123' },
+  { role: 'foundation_admin', portal: 'yayasan', id: 'sekretaris@alhikmah.or.id', pw: 'sekretaris123' },
   { role: 'admin', portal: 'admin', id: 'admin@alhikmah.sch.id', pw: 'admin123' },
   { role: 'teacher', portal: 'guru', id: 'ustadz@alhikmah.sch.id', pw: 'guru123' },
   { role: 'guardian', portal: 'ortu', id: 'wali@gmail.com', pw: 'wali123' },

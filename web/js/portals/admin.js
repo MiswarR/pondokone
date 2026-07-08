@@ -341,7 +341,7 @@ const routes = {
         name: UI.input({ value: existing?.name || '' }),
         phone: UI.input({ value: existing?.phone || '' }),
         email: UI.input({ type: 'email', value: existing?.email || '' }),
-        password: UI.input({ type: 'password', placeholder: 'Min. 6 karakter' }),
+        password: UI.passwordInput({ placeholder: 'Min. 6 karakter' }),
       };
       const roles = checkboxGroup(['guru', 'ustadz', 'wali_kelas', 'musyrif', 'admin_keuangan'].map((r) => ({ value: r, label: r })), existing?.staffRoles || []);
       const cls = checkboxGroup(classes.map((c) => ({ value: c.id, label: c.name })), existing?.classIds || []);
@@ -432,7 +432,7 @@ const routes = {
         phone: UI.input({ value: existing?.phone || '' }),
         email: UI.input({ type: 'email', value: existing?.email || '' }),
         address: UI.textarea({ value: existing?.address || '' }),
-        password: UI.input({ type: 'password', placeholder: 'Min. 6 karakter' }),
+        password: UI.passwordInput({ placeholder: 'Min. 6 karakter' }),
       };
       const kids = checkboxGroup(students.map((s) => ({ value: s.id, label: `${s.name} (${classNameOf(s.classId)})` })), existing?.childIds || []);
       const notif = checkboxGroup(['nilai', 'absensi', 'perilaku', 'tagihan'].map((n) => ({ value: n, label: n })),

@@ -147,7 +147,7 @@ function renderSidebarShell(portal, routeName, ctx) {
         el('div', { class: 'sub' }, (tenant || foundation) ? t('app.name') : t('app.tagline')),
       ),
     ),
-    portal.navGroups.map((group) => [
+    navGroupsOf(portal, ctx).map((group) => [
       group.label ? el('div', { class: 'nav-group-label' }, t(group.label)) : null,
       group.items.map((item) => {
         const node = el('div', {
@@ -171,7 +171,7 @@ function renderSidebarShell(portal, routeName, ctx) {
 
   const topbar = el('div', { class: 'topbar' },
     el('button', { class: 'hamburger', 'aria-label': 'Menu', onclick: () => document.body.classList.toggle('sidebar-open') }, '☰'),
-    el('div', { class: 'title' }, t(findNavLabel(portal, routeName))),
+    el('div', { class: 'title' }, t(findNavLabel(portal, routeName, ctx))),
     el('div', { class: 'grow' }),
     el('div', { class: 'searchbox' }, '🔎', el('input', { placeholder: t('common.search'), 'aria-label': t('common.search') })),
     notifBell(ctx),
@@ -199,13 +199,13 @@ function renderMobileShell(portal, routeName, ctx) {
   ctx.setHeader(el('div', { class: 'row between' },
     el('div', {},
       el('div', { class: 'xs muted' }, tenant?.name || t('app.name')),
-      el('div', { style: { fontWeight: 700, fontSize: '1.05rem' } }, t(findNavLabel(portal, routeName))),
+      el('div', { style: { fontWeight: 700, fontSize: '1.05rem' } }, t(findNavLabel(portal, routeName, ctx))),
     ),
     el('div', { class: 'row', style: { gap: '10px' } }, notifBell(ctx), avatar(ctx.session.name)),
   ));
 
   const navBar = el('div', { class: 'bottom-nav' },
-    portal.navGroups.flatMap((g) => g.items).map((item) =>
+    navGroupsOf(portal, ctx).flatMap((g) => g.items).map((item) =>
       el('button', {
         class: `tab ${item.route === routeName ? 'active' : ''}`,
         onclick: () => navigate(`${portal.id}/${item.route}`),
@@ -217,6 +217,12 @@ function renderMobileShell(portal, routeName, ctx) {
 
   app.append(el('div', { class: 'shell-mobile' }, headerHost, content, navBar), offlineBadge());
   renderRoute(portal, routeName, content, ctx);
+}
+
+/* navGroups boleh berupa array statis atau fungsi (ctx) => array,
+   agar menu bisa menyesuaikan jabatan pengguna (mis. bendahara yayasan). */
+function navGroupsOf(portal, ctx) {
+  return typeof portal.navGroups === 'function' ? portal.navGroups(ctx) : portal.navGroups;
 }
 
 function renderRoute(portal, routeName, content, ctx) {
@@ -233,9 +239,9 @@ function renderRoute(portal, routeName, content, ctx) {
   }
 }
 
-function findNavLabel(portal, routeName) {
+function findNavLabel(portal, routeName, ctx) {
   if (routeName === 'settings') return 'nav.settings';
-  for (const g of portal.navGroups) {
+  for (const g of navGroupsOf(portal, ctx)) {
     const item = g.items.find((i) => i.route === routeName);
     if (item) return item.label;
   }

@@ -214,6 +214,9 @@ function formModal({ title, fields, record = {}, onSave }) {
     } else if (f.type === 'number') {
       ctrl = UI.input({ type: 'number', value: cur });
       getters[f.key] = () => Number(ctrl.value || 0);
+    } else if (f.type === 'password') {
+      ctrl = UI.passwordInput({});
+      getters[f.key] = () => ctrl.value.trim();
     } else {
       ctrl = UI.input({ type: f.type || 'text', value: cur });
       getters[f.key] = () => ctrl.value.trim();
