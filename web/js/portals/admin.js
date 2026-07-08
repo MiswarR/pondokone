@@ -40,6 +40,7 @@ I18n.extend({
     'adm.teachers.add': 'Tambah Guru',
     'adm.guardians.add': 'Tambah Wali',
     'adm.struct.years': 'Tahun Ajaran',
+    'adm.struct.sessions': 'Sesi Absensi',
     'adm.struct.classes': 'Kelas',
     'adm.struct.halaqahs': 'Halaqah',
     'adm.struct.rooms': 'Kamar',
@@ -526,6 +527,21 @@ const routes = {
           { key: 'startDate', label: 'Mulai', type: 'date' },
           { key: 'endDate', label: 'Selesai', type: 'date' },
           { key: 'active', label: t('status.active'), type: 'check' },
+        ],
+      },
+      sessions: {
+        collection: 'sessionTypes', titleKey: 'adm.struct.sessions',
+        columns: [
+          { label: 'Nama sesi', key: 'name' },
+          { label: 'Mulai', render: (r) => r.startTime || '—' },
+          { label: 'Selesai', render: (r) => r.endTime || '—' },
+          { label: 'Urutan', render: (r) => r.order ?? '—' },
+        ],
+        fields: [
+          { key: 'name', label: 'Nama sesi', type: 'text' },
+          { key: 'startTime', label: 'Jam mulai', type: 'time' },
+          { key: 'endTime', label: 'Jam selesai', type: 'time' },
+          { key: 'order', label: 'Urutan tampil', type: 'number' },
         ],
       },
       classes: {
