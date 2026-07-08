@@ -8,27 +8,21 @@ import { t, getLangs, getLang, setLang } from './i18n.js';
 import * as Store from './store.js';
 import { el, field, input, toast } from './ui.js';
 
-/* Akun Web Master sengaja tidak ditampilkan di halaman publik.
-   Login master tetap berfungsi dengan mengetik kredensial secara manual. */
+/* Halaman login sengaja polos — tanpa kartu pemilihan portal.
+   Sistem otomatis mengarahkan ke portal yang tepat sesuai role akun.
+   Akun Web Master tetap tidak ditampilkan; login manual tetap bisa.
+   Daftar di bawah hanya teks akun demo (klik = isi otomatis). */
 const DEMO_ACCOUNTS = [
-  { role: 'foundation_admin', portal: 'yayasan', id: 'yayasan@alhikmah.or.id', pw: 'yayasan123' },
-  { role: 'foundation_admin', portal: 'yayasan', id: 'bendahara@alhikmah.or.id', pw: 'bendahara123' },
-  { role: 'foundation_admin', portal: 'yayasan', id: 'sekretaris@alhikmah.or.id', pw: 'sekretaris123' },
-  { role: 'admin', portal: 'admin', id: 'admin@alhikmah.sch.id', pw: 'admin123' },
-  { role: 'teacher', portal: 'guru', id: 'ustadz@alhikmah.sch.id', pw: 'guru123' },
-  { role: 'guardian', portal: 'ortu', id: 'wali@gmail.com', pw: 'wali123' },
-];
-
-const PORTALS = [
-  { id: 'yayasan', icon: '🏛️', nameKey: 'auth.portal.yayasan', descKey: 'auth.portal.yayasanDesc' },
-  { id: 'admin', icon: '🏫', nameKey: 'auth.portal.admin', descKey: 'auth.portal.adminDesc' },
-  { id: 'guru', icon: '👳', nameKey: 'auth.portal.guru', descKey: 'auth.portal.guruDesc' },
-  { id: 'ortu', icon: '👨‍👩‍👧', nameKey: 'auth.portal.ortu', descKey: 'auth.portal.ortuDesc' },
+  { id: 'yayasan@alhikmah.or.id', pw: 'yayasan123' },
+  { id: 'bendahara@alhikmah.or.id', pw: 'bendahara123' },
+  { id: 'sekretaris@alhikmah.or.id', pw: 'sekretaris123' },
+  { id: 'admin@alhikmah.sch.id', pw: 'admin123' },
+  { id: 'ustadz@alhikmah.sch.id', pw: 'guru123' },
+  { id: 'wali@gmail.com', pw: 'wali123' },
 ];
 
 export function renderAuth(container, { onLogin }) {
   container.innerHTML = '';
-  let selectedPortal = null;
 
   const langBar = el('div', { class: 'row', style: { justifyContent: 'center', marginBottom: 'var(--s-4)' } },
     getLangs().map((l) => el('button', {
@@ -56,23 +50,6 @@ export function renderAuth(container, { onLogin }) {
     onLogin(user);
   }
 
-  const portalGrid = el('div', { class: 'portal-pick' },
-    PORTALS.map((p) => el('div', {
-      class: 'p', role: 'button', tabindex: 0,
-      onclick: (e) => {
-        selectedPortal = p.id;
-        portalGrid.querySelectorAll('.p').forEach((n) => { n.style.borderColor = ''; });
-        e.currentTarget.style.borderColor = 'var(--accent)';
-        const acc = DEMO_ACCOUNTS.find((a) => a.portal === p.id);
-        if (acc) { idInput.value = acc.id; pwInput.value = acc.pw; }
-      },
-    },
-      el('div', { class: 'ico' }, p.icon),
-      el('div', { class: 'nm' }, t(p.nameKey)),
-      el('div', { class: 'ds' }, t(p.descKey)),
-    )),
-  );
-
   const card = el('div', { class: 'auth-card' },
     el('div', { class: 'row', style: { justifyContent: 'center', marginBottom: 'var(--s-3)' } },
       el('div', { class: 'brand', style: { border: 'none', padding: 0, margin: 0 } },
@@ -84,8 +61,6 @@ export function renderAuth(container, { onLogin }) {
       ),
     ),
     langBar,
-    el('p', { class: 'muted small', style: { textAlign: 'center', margin: '0 0 4px' } }, t('auth.choosePortal')),
-    portalGrid,
     field(t('auth.identifier'), idInput),
     field(t('auth.password'), pwWrap),
     el('label', { class: 'row small muted', style: { marginBottom: 'var(--s-3)', gap: '8px' } },
