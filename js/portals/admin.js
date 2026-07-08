@@ -9,6 +9,7 @@
 import I18n, { t, fmtMoney, fmtDate, fmtDateTime } from '../core/i18n.js';
 import * as Store from '../core/store.js';
 import * as UI from '../core/ui.js';
+import * as AI from '../core/ai.js';
 
 I18n.extend({
   id: {
@@ -41,6 +42,18 @@ I18n.extend({
     'adm.guardians.add': 'Tambah Wali',
     'adm.struct.years': 'Tahun Ajaran',
     'adm.struct.sessions': 'Sesi Absensi',
+    'adm.rapor.nav': 'Rapor',
+    'adm.rapor.title': 'Rapor Semester',
+    'adm.rapor.sub': 'Nilai terangkum otomatis dari input guru — tinggal lengkapi sikap & catatan',
+    'adm.rapor.compose': 'Susun Rapor',
+    'adm.rapor.saved': 'Tersusun',
+    'adm.rapor.notyet': 'Belum disusun',
+    'adm.rapor.aiSettings': 'Pengaturan AI',
+    'adm.rapor.aiFill': 'Isi dengan AI',
+    'adm.rapor.aiAll': 'Isi Semua dengan AI',
+    'adm.rapor.save': 'Simpan Rapor',
+    'adm.rapor.print': 'Cetak',
+    'adm.rapor.back': 'Kembali ke daftar',
     'adm.struct.classes': 'Kelas',
     'adm.struct.halaqahs': 'Halaqah',
     'adm.struct.rooms': 'Kamar',
@@ -1138,6 +1151,303 @@ const routes = {
       ),
     );
   },
+
+  /* ---------------- Rapor semester ----------------
+     Nilai otomatis terangkum dari input guru (rata-rata berbobot komponen).
+     Sikap & Catatan PJ bisa diisi manual atau dibuatkan AI (offline/online). */
+  rapor(container, ctx) {
+    const tid = ctx.session.tenantId;
+    const tenant = Store.get('tenants', tid);
+    const classes = Store.list('classes', (c) => c.tenantId === tid && c.status === 'active');
+    const activeYear = Store.list('academicYears', (y) => y.tenantId === tid && y.active)[0];
+    const KKM = 75;
+    const predikatOf = (n) => (n >= 90 ? 'A' : n >= 80 ? 'B' : n >= KKM ? 'C' : 'D');
+
+    let classFilter = classes[0]?.id || '';
+    let semester = `Semester Ganjil ${activeYear?.name || ''}`.trim();
+    const host = UI.el('div', {});
+
+    /* --- Rangkuman otomatis seluruh data siswa --- */
+    function studentData(s) {
+      const entries = Store.list('gradeEntries', (g) => g.tenantId === tid && g.studentId === s.id);
+      const bySubject = new Map();
+      for (const g of entries) {
+        if (!bySubject.has(g.subjectId)) bySubject.set(g.subjectId, []);
+        bySubject.get(g.subjectId).push(g);
+      }
+      const subjects = [];
+      for (const [subjectId, list] of bySubject) {
+        const subj = Store.get('subjects', subjectId);
+        let wSum = 0, wTotal = 0;
+        for (const g of list) {
+          const w = Store.get('gradeComponents', g.componentId)?.weight || 1;
+          wSum += g.score * w; wTotal += w;
+        }
+        const nilai = wTotal ? Math.round(wSum / wTotal) : 0;
+        subjects.push({ name: subj?.name || subjectId, category: subj?.category || 'umum', nilai, predikat: predikatOf(nilai) });
+      }
+      subjects.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+      const memos = Store.list('memorizationRecords', (m) => m.tenantId === tid && m.studentId === s.id);
+      const memoAvg = memos.length ? Math.round(memos.reduce((x, m) => x + (m.score || 0), 0) / memos.length) : null;
+
+      const recap = Store.attendanceRecap(s.id);
+      const totalAtt = Object.values(recap).reduce((a, b) => a + b, 0);
+      const attendPct = totalAtt ? Math.round(((recap.hadir + recap.terlambat) / totalAtt) * 100) : null;
+
+      const events = Store.list('behaviorEvents', (e) => e.tenantId === tid && e.studentId === s.id);
+      const violations = events.filter((e) => e.kind === 'violation');
+      const goods = events.filter((e) => e.kind === 'good');
+      const avgScore = subjects.length ? Math.round(subjects.reduce((x, r) => x + r.nilai, 0) / subjects.length) : null;
+
+      return { subjects, memos, memoAvg, recap, attendPct, violations, goods, avgScore };
+    }
+
+    function aiPayload(s, d) {
+      const detailText = [
+        `Nama: ${s.name}`,
+        d.attendPct !== null ? `Kehadiran: ${d.attendPct}% (hadir ${d.recap.hadir}, sakit ${d.recap.sakit}, izin ${d.recap.izin}, alpa ${d.recap.alfa}, terlambat ${d.recap.terlambat})` : 'Kehadiran: belum ada data',
+        d.avgScore !== null ? `Nilai rata-rata: ${d.avgScore} — rincian: ${d.subjects.map((r) => `${r.name} ${r.nilai}`).join(', ')}` : 'Nilai: belum ada data',
+        d.memos.length ? `Hafalan: ${d.memos.length} setoran, rata-rata nilai ${d.memoAvg}, terakhir ${d.memos[d.memos.length - 1].material}` : 'Hafalan: belum ada setoran',
+        d.violations.length ? `Pelanggaran (${d.violations.length}): ${d.violations.map((v) => v.chronology).join(' | ')}` : 'Pelanggaran: tidak ada',
+        d.goods.length ? `Kebaikan/prestasi (${d.goods.length}): ${d.goods.map((v) => v.chronology).join(' | ')}` : 'Prestasi khusus: belum tercatat',
+      ].join('\n');
+      return {
+        name: s.name, attendPct: d.attendPct, avgScore: d.avgScore,
+        memoCount: d.memos.length, memoAvg: d.memoAvg ?? 0,
+        violations: d.violations.length, achievements: d.goods.length, detailText,
+      };
+    }
+
+    const savedOf = (studentId) =>
+      Store.list('reportCards', (r) => r.tenantId === tid && r.studentId === studentId && r.semester === semester)[0] || null;
+
+    /* --- Pengaturan AI (provider + API key, tersimpan di perangkat) --- */
+    function aiSettingsModal() {
+      const cfg = AI.getConfig();
+      const provSel = UI.select(AI.PROVIDERS.map((p) => ({ value: p.id, label: p.label, selected: cfg.provider === p.id })));
+      const keyIn = UI.passwordInput({ placeholder: 'API key penyedia terpilih' });
+      keyIn.value = cfg.apiKey || '';
+      const maxIn = UI.input({ type: 'number', value: cfg.maxChars || 300 });
+      const m = UI.modal({
+        title: `🤖 ${t('adm.rapor.aiSettings')}`,
+        body: UI.el('div', {},
+          UI.el('p', { class: 'muted small' },
+            'AI membaca rangkuman absensi, nilai, hafalan, perilaku, dan prestasi siswa, lalu menyusun deskripsi sikap & Catatan PJ. Tanpa API key pun tetap berfungsi memakai template pintar bawaan.'),
+          UI.field('Penyedia AI', provSel),
+          UI.field('API Key', keyIn, 'Disimpan hanya di perangkat ini — tidak pernah dikirim ke server PondokOne.'),
+          UI.field('Batas panjang (karakter)', maxIn, 'Umumnya 250–400 karakter agar catatan tidak terlalu panjang.'),
+        ),
+        footer: [
+          UI.el('button', { class: 'btn ghost', onclick: () => m.close() }, t('common.cancel')),
+          UI.el('button', {
+            class: 'btn primary',
+            onclick: () => {
+              AI.setConfig({ provider: provSel.value, apiKey: keyIn.value.trim(), maxChars: Number(maxIn.value) || 300 });
+              UI.toast(t('common.saved'), 'ok'); m.close();
+            },
+          }, t('common.save')),
+        ],
+      });
+    }
+
+    /* --- Editor rapor per siswa --- */
+    function renderEditor(s) {
+      UI.clear(host);
+      const d = studentData(s);
+      const saved = savedOf(s.id);
+      const cls = Store.get('classes', s.classId);
+
+      const spiritualPred = UI.select(['A', 'B', 'C', 'D'].map((p) => ({ value: p, label: p, selected: (saved?.sikapSpiritual?.predikat || 'B') === p })));
+      const sosialPred = UI.select(['A', 'B', 'C', 'D'].map((p) => ({ value: p, label: p, selected: (saved?.sikapSosial?.predikat || 'B') === p })));
+      const editBox = (text) => UI.el('div', { class: 'rapor-edit', contenteditable: 'true' }, text || '');
+      const spiritualDesc = editBox(saved?.sikapSpiritual?.deskripsi);
+      const sosialDesc = editBox(saved?.sikapSosial?.deskripsi);
+      const catatanPj = editBox(saved?.catatanPj);
+
+      async function aiFill(kind, target, btn) {
+        const old = btn.textContent;
+        btn.disabled = true; btn.textContent = '⏳ Menyusun…';
+        try {
+          target.textContent = await AI.generateNote(kind, aiPayload(s, d));
+          UI.toast('✨ Selesai disusun AI', 'ok');
+        } catch (err) {
+          UI.toast(`AI gagal: ${String(err.message || err).slice(0, 120)}`, 'warn');
+        } finally { btn.disabled = false; btn.textContent = old; }
+      }
+      const aiBtn = (kind, target) => {
+        const b = UI.el('button', { class: 'btn ghost sm no-print' }, `✨ ${t('adm.rapor.aiFill')}`);
+        b.addEventListener('click', () => aiFill(kind, target, b));
+        return b;
+      };
+
+      const mapelRows = (cat, label) => {
+        const rows = d.subjects.filter((r) => r.category === cat);
+        if (!rows.length) return [];
+        return [
+          UI.el('tr', {}, UI.el('th', { colspan: '4' }, label)),
+          ...rows.map((r, i) => UI.el('tr', {},
+            UI.el('td', {}, String(i + 1)), UI.el('td', {}, r.name),
+            UI.el('td', {}, String(KKM)), UI.el('td', {}, `${r.nilai} (${r.predikat})`),
+          )),
+        ];
+      };
+
+      const sheet = UI.el('div', { class: 'panel rapor-sheet' },
+        UI.el('div', { style: { textAlign: 'center', marginBottom: 'var(--s-4)' } },
+          UI.el('h2', { style: { margin: 0 } }, 'LAPORAN HASIL BELAJAR (RAPOR)'),
+          UI.el('div', { class: 'small' }, tenant?.name || ''),
+          UI.el('div', { class: 'xs muted' }, tenant?.address || ''),
+        ),
+        UI.el('div', { class: 'grid grid-2', style: { marginBottom: 'var(--s-3)' } },
+          UI.el('div', {},
+            UI.el('div', { class: 'small' }, `Nama Peserta Didik : ${s.name}`),
+            UI.el('div', { class: 'small' }, `NIS/NISN : ${s.nis || '—'}`),
+            UI.el('div', { class: 'small' }, `Kelas : ${cls?.name || '—'}`),
+          ),
+          UI.el('div', {},
+            UI.el('div', { class: 'small' }, `Semester : ${semester}`),
+            UI.el('div', { class: 'small' }, `Tahun Pelajaran : ${activeYear?.name || '—'}`),
+          ),
+        ),
+
+        UI.el('h3', {}, 'A. Sikap'),
+        UI.el('div', { class: 'grid grid-2' },
+          UI.el('div', {},
+            UI.el('div', { class: 'row between' },
+              UI.el('strong', { class: 'small' }, '1. Sikap Spiritual — Predikat: '),
+              UI.el('span', {}, spiritualPred, UI.el('span', { class: 'print-predikat' }, '')),
+              aiBtn('spiritual', spiritualDesc)),
+            spiritualDesc,
+          ),
+          UI.el('div', {},
+            UI.el('div', { class: 'row between' },
+              UI.el('strong', { class: 'small' }, '2. Sikap Sosial — Predikat: '),
+              UI.el('span', {}, sosialPred, UI.el('span', { class: 'print-predikat' }, '')),
+              aiBtn('sosial', sosialDesc)),
+            sosialDesc,
+          ),
+        ),
+
+        UI.el('h3', { style: { marginTop: 'var(--s-4)' } }, 'B. Pengetahuan & Keterampilan'),
+        d.subjects.length
+          ? UI.el('table', { class: 'rapor' },
+            UI.el('thead', {}, UI.el('tr', {},
+              UI.el('th', {}, 'No'), UI.el('th', {}, 'Mata Pelajaran'), UI.el('th', {}, 'KKM'), UI.el('th', {}, 'Nilai (Predikat)'))),
+            UI.el('tbody', {},
+              mapelRows('umum', 'Kelompok Umum'),
+              mapelRows('pesantren', 'Kelompok Khusus'),
+              d.memoAvg !== null ? UI.el('tr', {},
+                UI.el('td', {}, ''), UI.el('td', {}, "Hafalan Al-Qur'an"),
+                UI.el('td', {}, String(KKM)), UI.el('td', {}, `${d.memoAvg} (${predikatOf(d.memoAvg)})`)) : null,
+            ))
+          : UI.el('p', { class: 'muted small' }, 'Belum ada nilai yang diinput guru untuk siswa ini.'),
+
+        UI.el('h3', {}, 'C. Ketidakhadiran'),
+        UI.el('table', { class: 'rapor', style: { maxWidth: '360px' } },
+          UI.el('tbody', {},
+            UI.el('tr', {}, UI.el('td', {}, 'Sakit'), UI.el('td', {}, `${d.recap.sakit} hari`)),
+            UI.el('tr', {}, UI.el('td', {}, 'Izin'), UI.el('td', {}, `${d.recap.izin} hari`)),
+            UI.el('tr', {}, UI.el('td', {}, 'Tanpa keterangan'), UI.el('td', {}, `${d.recap.alfa} hari`)),
+          )),
+
+        UI.el('h3', {}, 'D. Prestasi & Catatan Kebaikan'),
+        d.goods.length
+          ? UI.el('ul', { class: 'small', style: { margin: '4px 0 14px 18px' } },
+            d.goods.map((g) => UI.el('li', {}, `${fmtDate(g.date)} — ${g.chronology}`)))
+          : UI.el('p', { class: 'muted small' }, '—'),
+
+        UI.el('div', { class: 'row between', style: { alignItems: 'center' } },
+          UI.el('h3', {}, 'E. Catatan Penanggung Jawab Rombel'),
+          aiBtn('catatan', catatanPj)),
+        catatanPj,
+
+        UI.el('div', { class: 'grid grid-3', style: { marginTop: '40px', textAlign: 'center' } },
+          UI.el('div', { class: 'small' }, 'Orang Tua/Wali', UI.el('div', { style: { height: '56px' } }), '(………………………)'),
+          UI.el('div', { class: 'small' }, 'Penanggung Jawab Rombel', UI.el('div', { style: { height: '56px' } }), `( ${Store.get('users', ctx.session.userId)?.name || '………'} )`),
+          UI.el('div', { class: 'small' }, 'Kepala Sekolah', UI.el('div', { style: { height: '56px' } }), `( ${tenant?.adminName || '………'} )`),
+        ),
+      );
+
+      function saveRapor() {
+        const data = {
+          tenantId: tid, studentId: s.id, classId: s.classId, semester,
+          year: activeYear?.name || null,
+          sikapSpiritual: { predikat: spiritualPred.value, deskripsi: spiritualDesc.textContent.trim() },
+          sikapSosial: { predikat: sosialPred.value, deskripsi: sosialDesc.textContent.trim() },
+          catatanPj: catatanPj.textContent.trim(),
+          subjects: d.subjects, memoAvg: d.memoAvg, attendance: d.recap,
+          avgScore: d.avgScore,
+        };
+        const ex = savedOf(s.id);
+        if (ex) Store.update('reportCards', ex.id, data, ctx.session.userId);
+        else Store.insert('reportCards', data, ctx.session.userId);
+        UI.toast('✅ Rapor tersimpan', 'ok');
+      }
+
+      async function aiAll(btn) {
+        const old = btn.textContent;
+        btn.disabled = true; btn.textContent = '⏳ AI sedang menyusun…';
+        try {
+          const payload = aiPayload(s, d);
+          spiritualDesc.textContent = await AI.generateNote('spiritual', payload);
+          sosialDesc.textContent = await AI.generateNote('sosial', payload);
+          catatanPj.textContent = await AI.generateNote('catatan', payload);
+          UI.toast('✨ Sikap & catatan selesai disusun AI — silakan periksa lalu simpan', 'ok');
+        } catch (err) {
+          UI.toast(`AI gagal: ${String(err.message || err).slice(0, 120)}`, 'warn');
+        } finally { btn.disabled = false; btn.textContent = old; }
+      }
+      const aiAllBtn = UI.el('button', { class: 'btn' }, `✨ ${t('adm.rapor.aiAll')}`);
+      aiAllBtn.addEventListener('click', () => aiAll(aiAllBtn));
+
+      host.append(
+        UI.el('div', { class: 'row between', style: { marginBottom: 'var(--s-3)', flexWrap: 'wrap', gap: '8px' } },
+          UI.el('button', { class: 'btn ghost', onclick: renderList }, `← ${t('adm.rapor.back')}`),
+          UI.el('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } },
+            aiAllBtn,
+            UI.el('button', { class: 'btn primary', onclick: saveRapor }, `💾 ${t('adm.rapor.save')}`),
+            UI.el('button', { class: 'btn', onclick: () => { saveRapor(); window.print(); } }, `🖨 ${t('adm.rapor.print')}`),
+          ),
+        ),
+        sheet,
+      );
+    }
+
+    /* --- Daftar siswa per kelas --- */
+    function renderList() {
+      UI.clear(host);
+      const students = Store.list('students', (x) => x.tenantId === tid && x.status === 'active' && (!classFilter || x.classId === classFilter));
+      host.append(UI.dataTable({
+        columns: [
+          { label: t('common.name'), render: (r) => UI.el('div', { class: 'row', style: { gap: '10px', flexWrap: 'nowrap' } }, UI.avatar(r.name), r.name) },
+          { label: 'NIS', render: (r) => UI.el('span', { class: 'mono small' }, r.nis || '—') },
+          { label: 'Status Rapor', render: (r) => savedOf(r.id) ? UI.chip(t('adm.rapor.saved'), 'ok') : UI.chip(t('adm.rapor.notyet')) },
+          {
+            label: t('common.action'),
+            render: (r) => UI.el('button', { class: 'btn sm primary', onclick: () => renderEditor(r) }, `📜 ${t('adm.rapor.compose')}`),
+          },
+        ],
+        rows: students,
+      }));
+    }
+
+    const classSel = UI.select(classes.map((c) => ({ value: c.id, label: c.name, selected: c.id === classFilter })));
+    classSel.addEventListener('change', () => { classFilter = classSel.value; renderList(); });
+    const semIn = UI.input({ value: semester });
+    semIn.addEventListener('change', () => { semester = semIn.value.trim(); renderList(); });
+
+    container.append(
+      UI.pageHead(t('adm.rapor.title'), t('adm.rapor.sub'),
+        UI.el('button', { class: 'btn', onclick: aiSettingsModal }, `🤖 ${t('adm.rapor.aiSettings')}`)),
+      UI.el('div', { class: 'filterbar' },
+        UI.el('span', { class: 'muted small' }, t('common.class')), classSel,
+        UI.el('span', { class: 'muted small' }, 'Semester'), semIn,
+      ),
+      host,
+    );
+    renderList();
+  },
 };
 
 export default {
@@ -1163,6 +1473,7 @@ export default {
         { route: 'grades', icon: '📝', label: 'nav.grades' },
         { route: 'memorization', icon: '📖', label: 'nav.memorization' },
         { route: 'behavior', icon: '🧭', label: 'nav.behavior' },
+        { route: 'rapor', icon: '📜', label: 'adm.rapor.nav' },
       ],
     },
     {
