@@ -57,6 +57,44 @@ I18n.extend({
     'yys.prf.chairman': 'Ketua yayasan',
     'yys.prf.profile': 'Profil singkat',
     'yys.prf.logo': 'Logo yayasan',
+
+    'yys.nav.treasury': 'Kebendaharaan',
+    'yys.trs.title': 'Kebendaharaan Lembaga',
+    'yys.trs.sub': 'Kas yayasan: dana BOS/BOP, pemasukan & pengeluaran, bukti transaksi',
+    'yys.trs.in': 'Pemasukan',
+    'yys.trs.out': 'Pengeluaran',
+    'yys.trs.balance': 'Saldo Kas',
+    'yys.trs.add': 'Catat Transaksi',
+    'yys.trs.edit': 'Ubah Transaksi',
+    'yys.trs.kind': 'Jenis',
+    'yys.trs.category': 'Kategori',
+    'yys.trs.amount': 'Jumlah (Rp)',
+    'yys.trs.desc': 'Keterangan',
+    'yys.trs.proof': 'Bukti transaksi',
+    'yys.trs.viewProof': 'Lihat bukti',
+    'yys.trs.noProof': 'Tanpa bukti',
+    'yys.trs.readonly': 'Anda hanya dapat memantau laporan — pencatatan dilakukan oleh Bendahara.',
+    'yys.trs.by': 'Dicatat oleh',
+
+    'yys.nav.accounts': 'Akun Pengurus',
+    'yys.acc.title': 'Akun Pengurus Lembaga',
+    'yys.acc.sub': 'Kelola akun sesuai jabatan — kapasitas fitur mengikuti tugasnya',
+    'yys.acc.add': 'Tambah Akun',
+    'yys.acc.edit': 'Ubah Akun',
+    'yys.acc.jabatan': 'Jabatan',
+    'yys.acc.initialPw': 'Kata sandi awal',
+    'yys.acc.resetPw': 'Reset kata sandi',
+    'yys.acc.adminOnly': 'Halaman ini khusus Master Admin lembaga.',
+    'yys.acc.self': 'Akun Anda',
+
+    'yys.jab.admin': 'Master Admin',
+    'yys.jab.ketua': 'Ketua',
+    'yys.jab.sekretaris': 'Sekretaris',
+    'yys.jab.bendahara': 'Bendahara',
+    'yys.jab.admin.desc': 'Kelola semua: sekolah, akun, profil, keuangan',
+    'yys.jab.ketua.desc': 'Memantau seluruh laporan (tidak bisa mengedit)',
+    'yys.jab.sekretaris.desc': 'Memantau seluruh laporan (tidak bisa mengedit)',
+    'yys.jab.bendahara.desc': 'Mencatat pemasukan & pengeluaran + bukti transaksi',
   },
   en: {
     'yys.nav.schools': 'Schools',
@@ -88,6 +126,41 @@ I18n.extend({
 function fnd(ctx) { return Store.get('foundations', ctx.session.foundationId); }
 function mySchools(ctx) { return Store.tenantsOfFoundation(ctx.session.foundationId); }
 function daysAgoIso(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+
+/* Jabatan pengurus: admin (Master Admin) | bendahara | sekretaris | ketua.
+   Kapasitas fitur mengikuti jabatan — lihat navGroups & guard tiap route. */
+const JABATAN = ['admin', 'bendahara', 'sekretaris', 'ketua'];
+function jabatanOf(ctx) {
+  return Store.get('users', ctx.session.userId)?.fndRole || 'admin';
+}
+const isMasterAdmin = (ctx) => jabatanOf(ctx) === 'admin';
+const canRecordFinance = (ctx) => ['admin', 'bendahara'].includes(jabatanOf(ctx));
+
+function adminOnlyNotice(container) {
+  container.append(UI.emptyState(t('yys.acc.adminOnly'), '🔒'));
+}
+
+/* Unggah gambar bukti → dataURL (diperkecil agar hemat penyimpanan) */
+function imagePicker(onReady, maxSize = 800) {
+  const fileIn = UI.el('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
+  fileIn.addEventListener('change', () => {
+    const f = fileIn.files?.[0];
+    if (!f) return;
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      onReady(canvas.toDataURL('image/jpeg', 0.78));
+    };
+    reader.readAsDataURL(f);
+  });
+  return fileIn;
+}
 
 function kv(label, value) {
   return el('div', { class: 'row between', style: { padding: '4px 0', gap: 'var(--s-3)' } },
@@ -128,7 +201,7 @@ function schoolForm(existing, ctx, afterSave) {
     adminName: UI.input({ value: existing?.adminName || '' }),
     adminEmail: UI.input({ type: 'email', value: existing?.adminEmail || '' }),
     adminPhone: UI.input({ value: existing?.adminPhone || '' }),
-    adminPw: UI.input({ type: 'password', placeholder: 'Min. 6 karakter' }),
+    adminPw: UI.passwordInput({ placeholder: 'Min. 6 karakter' }),
   };
   const m = UI.modal({
     title: existing ? t('yys.sch.edit') : t('yys.sch.add'),
@@ -217,17 +290,23 @@ export default {
   role: 'foundation_admin',
   shell: 'sidebar',
   defaultRoute: 'dashboard',
-  navGroups: [
-    {
-      items: [
-        { route: 'dashboard', icon: '📊', label: 'nav.dashboard' },
-        { route: 'schools', icon: '🏫', label: 'yys.nav.schools' },
-        { route: 'academic', icon: '📚', label: 'yys.nav.academic' },
-        { route: 'finance', icon: '💰', label: 'yys.nav.finance' },
+  /* Menu menyesuaikan jabatan: Master Admin melihat semua; bendahara fokus
+     kebendaharaan; ketua/sekretaris hanya menu pantauan. */
+  navGroups(ctx) {
+    const jab = jabatanOf(ctx);
+    const items = [
+      { route: 'dashboard', icon: '📊', label: 'nav.dashboard' },
+      ...(jab === 'admin' ? [{ route: 'schools', icon: '🏫', label: 'yys.nav.schools' }] : []),
+      { route: 'academic', icon: '📚', label: 'yys.nav.academic' },
+      { route: 'finance', icon: '💰', label: 'yys.nav.finance' },
+      { route: 'treasury', icon: '💵', label: 'yys.nav.treasury' },
+      ...(jab === 'admin' ? [
+        { route: 'accounts', icon: '👥', label: 'yys.nav.accounts' },
         { route: 'profile', icon: '🏛️', label: 'yys.nav.profile' },
-      ],
-    },
-  ],
+      ] : []),
+    ];
+    return [{ items }];
+  },
 
   routes: {
     /* ---------- Dashboard agregat ---------- */
@@ -265,8 +344,242 @@ export default {
       );
     },
 
+    /* ---------- Kebendaharaan lembaga ---------- */
+    treasury(container, ctx) {
+      const fid = ctx.session.foundationId;
+      const canRecord = canRecordFinance(ctx);
+      const kpiHost = el('div', { class: 'grid grid-3' });
+      const host = el('div', { style: { marginTop: 'var(--s-4)' } });
+
+      const CATEGORIES = {
+        in: ['Dana BOS', 'Dana BOP', 'Donasi / Hibah', 'Infaq & Sedekah', 'Setoran unit sekolah', 'Lainnya'],
+        out: ['Gaji & Honor', 'Operasional', 'Pembangunan', 'Kegiatan', 'Pengadaan barang', 'Lainnya'],
+      };
+
+      const renderAll = () => {
+        clear(kpiHost); clear(host);
+        const txs = Store.list('fndTransactions', (x) => x.foundationId === fid)
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const inSum = txs.filter((x) => x.kind === 'in').reduce((s, x) => s + x.amount, 0);
+        const outSum = txs.filter((x) => x.kind === 'out').reduce((s, x) => s + x.amount, 0);
+        kpiHost.append(
+          UI.kpiCard({ label: t('yys.trs.in'), value: fmtMoney(inSum), tone: 'ok' }),
+          UI.kpiCard({ label: t('yys.trs.out'), value: fmtMoney(outSum), tone: 'warn' }),
+          UI.kpiCard({ label: t('yys.trs.balance'), value: fmtMoney(inSum - outSum), tone: inSum - outSum >= 0 ? 'ok' : 'danger' }),
+        );
+        host.append(UI.dataTable({
+          columns: [
+            { label: t('common.date'), render: (r) => fmtDate(r.date) },
+            { label: t('yys.trs.kind'), render: (r) => UI.chip(r.kind === 'in' ? t('yys.trs.in') : t('yys.trs.out'), r.kind === 'in' ? 'ok' : 'warn') },
+            { label: t('yys.trs.category'), key: 'category' },
+            {
+              label: t('yys.trs.desc'),
+              render: (r) => el('div', {},
+                el('div', {}, r.description || '—'),
+                el('div', { class: 'xs muted' }, `${t('yys.trs.by')}: ${Store.get('users', r.createdBy)?.name || '—'}`)),
+            },
+            { label: t('yys.trs.amount'), render: (r) => el('strong', { style: { color: r.kind === 'in' ? 'var(--ok)' : 'var(--warn)', whiteSpace: 'nowrap' } }, `${r.kind === 'in' ? '+' : '−'} ${fmtMoney(r.amount)}`) },
+            {
+              label: t('yys.trs.proof'),
+              render: (r) => r.proofDataUrl
+                ? el('button', {
+                  class: 'btn ghost sm',
+                  onclick: () => UI.modal({
+                    title: `${t('yys.trs.proof')} — ${r.category}`,
+                    body: el('img', { src: r.proofDataUrl, alt: 'Bukti', style: { maxWidth: '100%', borderRadius: '10px' } }),
+                  }),
+                }, `🧾 ${t('yys.trs.viewProof')}`)
+                : el('span', { class: 'muted xs' }, t('yys.trs.noProof')),
+            },
+            ...(canRecord ? [{
+              label: t('common.action'),
+              render: (r) => el('div', { class: 'row', style: { flexWrap: 'nowrap' } },
+                el('button', { class: 'btn sm', onclick: () => txForm(r) }, t('common.edit')),
+                el('button', { class: 'btn sm danger', onclick: () => UI.confirmDialog(r.description || r.category, () => { Store.remove('fndTransactions', r.id, ctx.session.userId); renderAll(); }) }, t('common.delete')),
+              ),
+            }] : []),
+          ],
+          rows: txs,
+        }));
+      };
+
+      function txForm(existing) {
+        let kind = existing?.kind || 'in';
+        let proofDataUrl = existing?.proofDataUrl || null;
+
+        const dateIn = UI.input({ type: 'date', value: existing?.date || new Date().toISOString().slice(0, 10) });
+        const catSel = UI.select(CATEGORIES[kind].map((c) => ({ value: c, label: c, selected: existing?.category === c })));
+        const amountIn = UI.input({ type: 'number', value: existing?.amount ?? '', placeholder: 'cth: 5000000' });
+        const descIn = UI.textarea({ value: existing?.description || '' });
+
+        const rebuildCats = () => {
+          catSel.innerHTML = '';
+          CATEGORIES[kind].forEach((c) => catSel.append(el('option', { value: c }, c)));
+        };
+        const kindSeg = UI.segmented(
+          [{ value: 'in', label: `⬇ ${t('yys.trs.in')}` }, { value: 'out', label: `⬆ ${t('yys.trs.out')}` }],
+          kind,
+          (v) => { kind = v; rebuildCats(); },
+          { in: 'ok', out: 'warn' },
+        );
+
+        const proofThumb = el('div', {});
+        const renderProof = () => {
+          clear(proofThumb);
+          if (proofDataUrl) {
+            proofThumb.append(
+              el('img', { src: proofDataUrl, alt: 'Bukti', style: { maxWidth: '160px', borderRadius: '8px', display: 'block', marginBottom: '6px' } }),
+              el('button', { type: 'button', class: 'btn ghost sm', onclick: () => { proofDataUrl = null; renderProof(); } }, '🗑 Hapus bukti'),
+            );
+          }
+        };
+        renderProof();
+        const picker = imagePicker((url) => { proofDataUrl = url; renderProof(); });
+
+        const m = UI.modal({
+          title: existing ? t('yys.trs.edit') : t('yys.trs.add'),
+          wide: true,
+          body: el('div', { class: 'form-grid' },
+            UI.field(t('yys.trs.kind'), kindSeg),
+            UI.field(t('common.date'), dateIn),
+            UI.field(t('yys.trs.category'), catSel),
+            UI.field(t('yys.trs.amount'), amountIn),
+            el('div', { class: 'full' }, UI.field(t('yys.trs.desc'), descIn)),
+            el('div', { class: 'full' },
+              UI.field(t('yys.trs.proof'),
+                el('div', {},
+                  proofThumb,
+                  el('button', { type: 'button', class: 'btn sm', onclick: () => picker.click() }, '📁 Unggah foto/scan bukti…'),
+                  picker,
+                ),
+                'Foto nota, kuitansi, atau bukti transfer. Otomatis diperkecil.'),
+            ),
+          ),
+          footer: [
+            el('button', { class: 'btn ghost', onclick: () => m.close() }, t('common.cancel')),
+            el('button', {
+              class: 'btn primary',
+              onclick: () => {
+                const amount = Number(amountIn.value || 0);
+                if (!amount || amount <= 0) { UI.toast(`${t('yys.trs.amount')} — ${t('common.required')}`, 'warn'); return; }
+                const data = {
+                  foundationId: fid, kind, date: dateIn.value, category: catSel.value,
+                  amount, description: descIn.value.trim(), proofDataUrl,
+                };
+                if (existing) Store.update('fndTransactions', existing.id, data, ctx.session.userId);
+                else Store.insert('fndTransactions', { ...data, createdBy: ctx.session.userId }, ctx.session.userId);
+                UI.toast(t('common.saved'), 'ok'); m.close(); renderAll();
+              },
+            }, t('common.save')),
+          ],
+        });
+      }
+
+      renderAll();
+      container.append(
+        UI.pageHead(t('yys.trs.title'), t('yys.trs.sub'),
+          canRecord ? el('button', { class: 'btn primary', onclick: () => txForm(null) }, `＋ ${t('yys.trs.add')}`) : null),
+        canRecord ? null : el('div', { class: 'panel', style: { marginBottom: 'var(--s-3)' } },
+          el('span', { class: 'muted small' }, `👁 ${t('yys.trs.readonly')}`)),
+        kpiHost,
+        host,
+      );
+    },
+
+    /* ---------- Akun pengurus lembaga (khusus Master Admin) ---------- */
+    accounts(container, ctx) {
+      if (!isMasterAdmin(ctx)) { adminOnlyNotice(container); return; }
+      const fid = ctx.session.foundationId;
+      const host = el('div');
+
+      const render = () => {
+        clear(host);
+        const rows = Store.list('users', (u) => u.role === 'foundation_admin' && u.foundationId === fid);
+        host.append(UI.dataTable({
+          columns: [
+            {
+              label: t('common.name'),
+              render: (u) => el('div', { class: 'row', style: { gap: '10px', flexWrap: 'nowrap' } },
+                UI.avatar(u.name),
+                el('div', {},
+                  el('div', {}, u.name),
+                  u.id === ctx.session.userId ? el('div', { class: 'xs muted' }, t('yys.acc.self')) : null)),
+            },
+            { label: t('yys.acc.jabatan'), render: (u) => UI.chip(t(`yys.jab.${u.fndRole || 'admin'}`), u.fndRole === 'admin' ? 'info' : u.fndRole === 'bendahara' ? 'ok' : '') },
+            { label: 'Email', key: 'email' },
+            { label: 'HP', key: 'phone' },
+            {
+              label: t('common.action'),
+              render: (u) => el('div', { class: 'row', style: { flexWrap: 'nowrap' } },
+                el('button', { class: 'btn sm', onclick: () => accForm(u) }, t('common.edit')),
+                u.id !== ctx.session.userId
+                  ? el('button', { class: 'btn sm danger', onclick: () => UI.confirmDialog(u.name, () => { Store.remove('users', u.id, ctx.session.userId); render(); }) }, t('common.delete'))
+                  : null),
+            },
+          ],
+          rows,
+        }));
+      };
+
+      function accForm(existing) {
+        const f = {
+          name: UI.input({ value: existing?.name || '' }),
+          jab: UI.select(JABATAN.map((j) => ({ value: j, label: `${t(`yys.jab.${j}`)} — ${t(`yys.jab.${j}.desc`)}`, selected: (existing?.fndRole || 'admin') === j }))),
+          email: UI.input({ type: 'email', value: existing?.email || '' }),
+          phone: UI.input({ value: existing?.phone || '' }),
+          pw: UI.passwordInput({ placeholder: 'Min. 6 karakter' }),
+        };
+        const m = UI.modal({
+          title: existing ? t('yys.acc.edit') : t('yys.acc.add'),
+          wide: true,
+          body: el('div', { class: 'form-grid' },
+            UI.field(t('common.name'), f.name),
+            el('div', { class: 'full' }, UI.field(t('yys.acc.jabatan'), f.jab)),
+            UI.field('Email', f.email),
+            UI.field('No. HP', f.phone),
+            UI.field(existing ? t('yys.acc.resetPw') : t('yys.acc.initialPw'), f.pw,
+              existing ? 'Kosongkan bila tidak ingin mengubah kata sandi' : 'Dipakai untuk login pertama kali'),
+          ),
+          footer: [
+            el('button', { class: 'btn ghost', onclick: () => m.close() }, t('common.cancel')),
+            el('button', {
+              class: 'btn primary',
+              onclick: () => {
+                const email = f.email.value.trim();
+                const pw = f.pw.value.trim();
+                if (!f.name.value.trim() || !email) { UI.toast(t('common.required'), 'warn'); return; }
+                if (!existing && pw.length < 6) { UI.toast('Kata sandi minimal 6 karakter', 'warn'); return; }
+                if (existing && pw && pw.length < 6) { UI.toast('Kata sandi minimal 6 karakter', 'warn'); return; }
+                const data = {
+                  name: f.name.value.trim(), fndRole: f.jab.value,
+                  email, identifier: email, phone: f.phone.value.trim() || null,
+                };
+                if (existing) {
+                  Store.update('users', existing.id, pw ? { ...data, password: pw } : data, ctx.session.userId);
+                } else {
+                  Store.insert('users', {
+                    ...data, tenantId: null, foundationId: fid,
+                    role: 'foundation_admin', password: pw, status: 'active',
+                  }, ctx.session.userId);
+                }
+                UI.toast(t('common.saved'), 'ok'); m.close(); render();
+              },
+            }, t('common.save')),
+          ],
+        });
+      }
+
+      render();
+      container.append(
+        UI.pageHead(t('yys.acc.title'), t('yys.acc.sub'),
+          el('button', { class: 'btn primary', onclick: () => accForm(null) }, `＋ ${t('yys.acc.add')}`)),
+        host,
+      );
+    },
+
     /* ---------- Kelola sekolah/pondok naungan ---------- */
     schools(container, ctx) {
+      if (!isMasterAdmin(ctx)) { adminOnlyNotice(container); return; }
       const host = el('div');
       const renderList = () => {
         clear(host);
@@ -360,8 +673,9 @@ export default {
       );
     },
 
-    /* ---------- Profil & logo yayasan ---------- */
+    /* ---------- Profil & logo yayasan (khusus Master Admin) ---------- */
     profile(container, ctx) {
+      if (!isMasterAdmin(ctx)) { adminOnlyNotice(container); return; }
       const foundation = fnd(ctx);
       if (!foundation) { container.append(UI.emptyState(t('common.empty'), '🏛️')); return; }
 

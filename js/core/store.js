@@ -5,7 +5,7 @@
    dan agar mudah ditukar dengan REST API /v1 di produksi.
    ============================================================ */
 
-const LS_KEY = 'po.db.v2'; // v2: entitas yayasan (foundations) + invoice SaaS per yayasan
+const LS_KEY = 'po.db.v3'; // v3: kebendaharaan lembaga (fndTransactions) + jabatan pengurus (fndRole)
 const DRAFT_KEY = 'po.drafts.v1';
 
 let db = null;
@@ -38,7 +38,7 @@ export function resetDemo() {
 }
 
 /* ---------- CRUD generik ---------- */
-const AUDITED = new Set(['gradeEntries', 'behaviorEvents', 'bills', 'payments', 'saasInvoices', 'tenants', 'students', 'users', 'foundations']);
+const AUDITED = new Set(['gradeEntries', 'behaviorEvents', 'bills', 'payments', 'saasInvoices', 'tenants', 'students', 'users', 'foundations', 'fndTransactions']);
 
 export function list(name, filterFn) {
   const col = load()[name] || [];
@@ -316,9 +316,13 @@ function buildSeed() {
   /* --- Users --- */
   const users = [
     { id: 'usr_master', tenantId: null, role: 'master', name: 'Pusat PondokOne', identifier: 'master@pondokone.id', email: 'master@pondokone.id', phone: '0811000001', password: 'master123', status: 'active' },
-    /* Master Admin lembaga/yayasan — melihat seluruh sekolah naungannya */
-    { id: 'usr_yayasan1', tenantId: null, foundationId: F1, role: 'foundation_admin', name: 'KH. Mahmud Baidhowi', identifier: 'yayasan@alhikmah.or.id', email: 'yayasan@alhikmah.or.id', phone: '0811000010', password: 'yayasan123', status: 'active' },
-    { id: 'usr_yayasan2', tenantId: null, foundationId: F2, role: 'foundation_admin', name: 'Dr. H. Rahmat Hidayat', identifier: 'yayasan@cahayailmu.or.id', email: 'yayasan@cahayailmu.or.id', phone: '0811000011', password: 'yayasan123', status: 'active' },
+    /* Pengurus lembaga/yayasan — fndRole menentukan kapasitas fitur:
+       admin = Master Admin (kelola semua), bendahara = input keuangan lembaga,
+       ketua/sekretaris = hanya memantau laporan. */
+    { id: 'usr_yayasan1', tenantId: null, foundationId: F1, role: 'foundation_admin', fndRole: 'admin', name: 'KH. Mahmud Baidhowi', identifier: 'yayasan@alhikmah.or.id', email: 'yayasan@alhikmah.or.id', phone: '0811000010', password: 'yayasan123', status: 'active' },
+    { id: 'usr_bendahara1', tenantId: null, foundationId: F1, role: 'foundation_admin', fndRole: 'bendahara', name: 'H. Umar Faruq, S.E.', identifier: 'bendahara@alhikmah.or.id', email: 'bendahara@alhikmah.or.id', phone: '0811000012', password: 'bendahara123', status: 'active' },
+    { id: 'usr_sekretaris1', tenantId: null, foundationId: F1, role: 'foundation_admin', fndRole: 'sekretaris', name: 'Hj. Aminah Zahra, S.Pd.I', identifier: 'sekretaris@alhikmah.or.id', email: 'sekretaris@alhikmah.or.id', phone: '0811000013', password: 'sekretaris123', status: 'active' },
+    { id: 'usr_yayasan2', tenantId: null, foundationId: F2, role: 'foundation_admin', fndRole: 'admin', name: 'Dr. H. Rahmat Hidayat', identifier: 'yayasan@cahayailmu.or.id', email: 'yayasan@cahayailmu.or.id', phone: '0811000011', password: 'yayasan123', status: 'active' },
     { id: 'usr_admin1', tenantId: T1, role: 'admin', name: 'H. Syamsul Arifin', identifier: 'admin@alhikmah.sch.id', email: 'admin@alhikmah.sch.id', phone: '0811000002', password: 'admin123', status: 'active' },
     { id: 'usr_admin2', tenantId: T2, role: 'admin', name: 'Dewi Lestari, S.Pd', identifier: 'admin@cahayailmu.sch.id', email: 'admin@cahayailmu.sch.id', phone: '0811000003', password: 'admin123', status: 'active' },
     { id: 'usr_admin3', tenantId: T3, role: 'admin', name: 'Ust. Fahmi Ramadhan, M.Pd', identifier: 'admin@smpit-alhikmah.sch.id', email: 'admin@smpit-alhikmah.sch.id', phone: '0811000004', password: 'admin123', status: 'active' },
@@ -564,6 +568,16 @@ function buildSeed() {
     },
   ];
 
+  /* --- Kebendaharaan lembaga (kas yayasan: BOS/BOP, pemasukan, pengeluaran) --- */
+  const fndTransactions = [
+    { id: 'ftx_001', foundationId: F1, date: daysAgo(28), kind: 'in', category: 'Dana BOS', amount: 45000000, description: 'Pencairan BOS tahap II — 2 sekolah naungan', proofDataUrl: null, createdBy: 'usr_bendahara1' },
+    { id: 'ftx_002', foundationId: F1, date: daysAgo(25), kind: 'in', category: 'Dana BOP', amount: 15000000, description: 'BOP pesantren semester ganjil', proofDataUrl: null, createdBy: 'usr_bendahara1' },
+    { id: 'ftx_003', foundationId: F1, date: daysAgo(20), kind: 'out', category: 'Gaji & Honor', amount: 22000000, description: 'Gaji guru & staf bulan Juni', proofDataUrl: null, createdBy: 'usr_bendahara1' },
+    { id: 'ftx_004', foundationId: F1, date: daysAgo(14), kind: 'out', category: 'Operasional', amount: 4500000, description: 'Listrik, air, internet seluruh unit', proofDataUrl: null, createdBy: 'usr_bendahara1' },
+    { id: 'ftx_005', foundationId: F1, date: daysAgo(9), kind: 'in', category: 'Donasi / Hibah', amount: 5000000, description: 'Donasi wali santri untuk pembangunan musala', proofDataUrl: null, createdBy: 'usr_bendahara1' },
+    { id: 'ftx_006', foundationId: F1, date: daysAgo(4), kind: 'out', category: 'Pembangunan', amount: 8000000, description: 'Material renovasi asrama Al-Fath', proofDataUrl: null, createdBy: 'usr_bendahara1' },
+  ];
+
   /* --- Pengumuman & notifikasi --- */
   const announcements = [
     { id: uid('ann'), tenantId: T1, title: 'Libur Idul Adha', body: 'KBM diliburkan tanggal 12–14 Juli. Santri mukim tetap mengikuti agenda pondok.', date: daysAgo(2), audience: 'all' },
@@ -594,7 +608,7 @@ function buildSeed() {
   ];
 
   return {
-    foundations, plans, tenants, saasInvoices, users, students, classes, halaqahs, rooms, subjects,
+    foundations, fndTransactions, plans, tenants, saasInvoices, users, students, classes, halaqahs, rooms, subjects,
     academicYears, semesters, gradeComponents, behaviorRules,
     attendanceSessions, memorizationRecords, memorizationTargets,
     gradeEntries, behaviorEvents,

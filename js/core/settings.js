@@ -6,7 +6,7 @@
 
 import { t, getLang, getLangs, setLang } from './i18n.js';
 import * as Store from './store.js';
-import { el, field, input, select, tabs, toast, segmented } from './ui.js';
+import { el, field, input, passwordInput, select, tabs, toast, segmented } from './ui.js';
 
 const PREFS_KEY = 'po.prefs';
 
@@ -70,9 +70,9 @@ const SECTIONS = {
   account(session) {
     const user = Store.get('users', session.userId) || {};
 
-    const pwCurrent = input({ type: 'password', placeholder: 'Kata sandi saat ini' });
-    const pwNew     = input({ type: 'password', placeholder: 'Minimal 6 karakter' });
-    const pwConfirm = input({ type: 'password', placeholder: 'Ulangi kata sandi baru' });
+    const pwCurrent = passwordInput({ placeholder: 'Kata sandi saat ini' });
+    const pwNew     = passwordInput({ placeholder: 'Minimal 6 karakter' });
+    const pwConfirm = passwordInput({ placeholder: 'Ulangi kata sandi baru' });
     const pwErr     = el('div', { class: 'small', style: { color: 'var(--danger)', minHeight: '1.2em' } });
 
     function doChangePassword() {

@@ -16,6 +16,7 @@ export function el(tag, attrs = {}, ...children) {
     else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'html') node.innerHTML = v;
+    else if (k === 'value') node.value = v; /* properti, bukan atribut — atribut value tidak berlaku utk <textarea> */
     else if (v === true) node.setAttribute(k, '');
     else node.setAttribute(k, v);
   }
@@ -171,6 +172,25 @@ export function field(labelText, inputEl, hint) {
 }
 
 export function input(attrs = {}) { return el('input', { type: 'text', ...attrs }); }
+
+/** Input kata sandi + ikon 👁 untuk melihat/menyembunyikan isian.
+    Wrapper punya properti .value sendiri sehingga bisa dipakai persis
+    seperti input biasa (f.password.value). */
+export function passwordInput(attrs = {}) {
+  const inp = el('input', { type: 'password', ...attrs });
+  const toggle = el('button', {
+    type: 'button', class: 'btn ghost sm', 'aria-label': 'Lihat kata sandi',
+    style: { position: 'absolute', insetInlineEnd: '6px', top: '5px', padding: '3px 8px' },
+    onclick: () => {
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+      toggle.textContent = inp.type === 'password' ? '👁' : '🙈';
+    },
+  }, '👁');
+  const wrap = el('div', { style: { position: 'relative' } }, inp, toggle);
+  Object.defineProperty(wrap, 'value', { get: () => inp.value, set: (v) => { inp.value = v; } });
+  wrap.input = inp;
+  return wrap;
+}
 
 export function select(options, attrs = {}) {
   // options: [{value, label, selected}]
