@@ -562,12 +562,14 @@ const routes = {
         columns: [
           { label: t('common.name'), key: 'name' },
           { label: 'Jenjang', key: 'level' },
+          { label: 'Jurusan/Peminatan', render: (r) => r.jurusan || '—' },
           { label: 'Wali kelas', render: (r) => userNameOf(r.homeroomId) },
           { label: 'Kapasitas', key: 'capacity' },
         ],
         fields: [
           { key: 'name', label: t('common.name'), type: 'text' },
-          { key: 'level', label: 'Jenjang', type: 'text' },
+          { key: 'level', label: 'Jenjang (SD/SMP/SMA/PKBM)', type: 'text' },
+          { key: 'jurusan', label: 'Jurusan/Peminatan (IIS/MIA/Bahasa — kosongkan bila tidak ada)', type: 'text' },
           { key: 'homeroomId', label: 'Wali kelas', type: 'select', options: teacherOpts },
           { key: 'capacity', label: 'Kapasitas', type: 'number' },
         ],
@@ -614,7 +616,15 @@ const routes = {
         fields: [
           { key: 'code', label: 'Kode', type: 'text' },
           { key: 'name', label: t('common.name'), type: 'text' },
-          { key: 'category', label: 'Kategori', type: 'select', options: () => [{ value: 'umum', label: 'Umum' }, { value: 'pesantren', label: 'Pesantren' }] },
+          { key: 'category', label: 'Kelompok (di rapor)', type: 'select', options: () => [
+            { value: 'umum', label: 'Kelompok Umum' },
+            { value: 'peminatan', label: 'Peminatan (SMA — IIS/MIA/Bahasa)' },
+            { value: 'pemberdayaan', label: 'Kelompok Khusus — Pemberdayaan (Hafalan, Bhs Arab)' },
+            { value: 'keterampilan', label: 'Kelompok Khusus — Keterampilan (Seni, Prakarya, PJOK)' },
+            { value: 'pesantren', label: 'Pesantren (legacy)' },
+          ] },
+          { key: 'skk', label: 'SKK (Standar Kompetensi Kelulusan)', type: 'number' },
+          { key: 'jurusan', label: 'Untuk jurusan (IIS/MIA/Bahasa — kosongkan bila umum)', type: 'text' },
         ],
       },
       components: {
@@ -1169,24 +1179,41 @@ const routes = {
 
     /* --- Rangkuman otomatis seluruh data siswa --- */
     function studentData(s) {
+      const cls = Store.get('classes', s.classId);
       const entries = Store.list('gradeEntries', (g) => g.tenantId === tid && g.studentId === s.id);
       const bySubject = new Map();
       for (const g of entries) {
         if (!bySubject.has(g.subjectId)) bySubject.set(g.subjectId, []);
         bySubject.get(g.subjectId).push(g);
       }
+      /* Pisah nilai per komponen: PENGETAHUAN = komponen non-keterampilan (UH/Tugas/PTS/PAS),
+         KETERAMPILAN = komponen kategori 'keterampilan' bila ada; fallback: nilai sama */
       const subjects = [];
       for (const [subjectId, list] of bySubject) {
         const subj = Store.get('subjects', subjectId);
-        let wSum = 0, wTotal = 0;
+        if (!subj) continue;
+        /* saring mapel peminatan: hanya tampil bila cocok dengan jurusan kelas atau tak berjurusan */
+        if (subj.category === 'peminatan' && subj.jurusan && cls?.jurusan && subj.jurusan !== cls.jurusan) continue;
+        let pSum = 0, pW = 0, kSum = 0, kW = 0;
         for (const g of list) {
-          const w = Store.get('gradeComponents', g.componentId)?.weight || 1;
-          wSum += g.score * w; wTotal += w;
+          const comp = Store.get('gradeComponents', g.componentId);
+          const w = comp?.weight || 1;
+          if (comp?.category === 'keterampilan') { kSum += g.score * w; kW += w; }
+          else { pSum += g.score * w; pW += w; }
         }
-        const nilai = wTotal ? Math.round(wSum / wTotal) : 0;
-        subjects.push({ name: subj?.name || subjectId, category: subj?.category || 'umum', nilai, predikat: predikatOf(nilai) });
+        const nilaiP = pW ? Math.round(pSum / pW) : 0;
+        const nilaiK = kW ? Math.round(kSum / kW) : nilaiP; /* fallback: samakan bila tak ada nilai keterampilan */
+        subjects.push({
+          name: subj.name || subjectId,
+          category: subj.category || 'umum',
+          skk: subj.skk || 1,
+          nilaiP, nilaiK,
+          predikatP: predikatOf(nilaiP),
+          predikatK: predikatOf(nilaiK),
+        });
       }
-      subjects.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      const KAT_ORDER = { umum: 1, peminatan: 2, pemberdayaan: 3, keterampilan: 4, pesantren: 3 };
+      subjects.sort((a, b) => (KAT_ORDER[a.category] || 9) - (KAT_ORDER[b.category] || 9) || a.name.localeCompare(b.name));
 
       const memos = Store.list('memorizationRecords', (m) => m.tenantId === tid && m.studentId === s.id);
       const memoAvg = memos.length ? Math.round(memos.reduce((x, m) => x + (m.score || 0), 0) / memos.length) : null;
@@ -1198,9 +1225,9 @@ const routes = {
       const events = Store.list('behaviorEvents', (e) => e.tenantId === tid && e.studentId === s.id);
       const violations = events.filter((e) => e.kind === 'violation');
       const goods = events.filter((e) => e.kind === 'good');
-      const avgScore = subjects.length ? Math.round(subjects.reduce((x, r) => x + r.nilai, 0) / subjects.length) : null;
+      const avgScore = subjects.length ? Math.round(subjects.reduce((x, r) => x + r.nilaiP, 0) / subjects.length) : null;
 
-      return { subjects, memos, memoAvg, recap, attendPct, violations, goods, avgScore };
+      return { subjects, memos, memoAvg, recap, attendPct, violations, goods, avgScore, cls };
     }
 
     function aiPayload(s, d) {
@@ -1281,91 +1308,193 @@ const routes = {
         return b;
       };
 
-      const mapelRows = (cat, label) => {
-        const rows = d.subjects.filter((r) => r.category === cat);
-        if (!rows.length) return [];
-        return [
-          UI.el('tr', {}, UI.el('th', { colspan: '4' }, label)),
-          ...rows.map((r, i) => UI.el('tr', {},
-            UI.el('td', {}, String(i + 1)), UI.el('td', {}, r.name),
-            UI.el('td', {}, String(KKM)), UI.el('td', {}, `${r.nilai} (${r.predikat})`),
+      /* --- Baris tabel P/K sesuai kelompok (Umum → Peminatan → Khusus Pemberdayaan → Khusus Keterampilan) --- */
+      const jurusanLabel = d.cls?.jurusan ? ` (${d.cls.jurusan})` : '';
+      const KELOMPOK = [
+        { key: 'umum', label: 'Kelompok Umum', numbered: true },
+        { key: 'peminatan', label: `Peminatan${jurusanLabel}`, numbered: true },
+        { key: 'pemberdayaan', label: 'Kelompok Khusus — Pemberdayaan', numbered: false, includeHafalan: true },
+        { key: 'keterampilan', label: 'Kelompok Khusus — Keterampilan', numbered: false },
+      ];
+      function mapelRows(kind /* 'P' | 'K' */) {
+        const nodes = [];
+        let no = 0;
+        for (const kel of KELOMPOK) {
+          let items = d.subjects.filter((r) => r.category === kel.key);
+          /* legacy 'pesantren' dilebur ke Pemberdayaan agar rapor lama tetap tampil */
+          if (kel.key === 'pemberdayaan') items = items.concat(d.subjects.filter((r) => r.category === 'pesantren'));
+          if (!items.length && !(kel.key === 'pemberdayaan' && kel.includeHafalan && d.memoAvg !== null)) continue;
+          nodes.push(UI.el('tr', { class: 'grp' },
+            UI.el('td', { colspan: '5', style: { fontWeight: 700 } }, kel.label)));
+          items.forEach((r) => {
+            no += 1;
+            const nilai = kind === 'K' ? r.nilaiK : r.nilaiP;
+            const pred = kind === 'K' ? r.predikatK : r.predikatP;
+            nodes.push(UI.el('tr', {},
+              UI.el('td', {}, kel.numbered ? String(no) : ''),
+              UI.el('td', {}, r.name),
+              UI.el('td', {}, String(r.skk || 1)),
+              UI.el('td', {}, String(KKM)),
+              UI.el('td', {}, `${nilai} (${pred})`),
+            ));
+          });
+          if (kel.key === 'pemberdayaan' && kel.includeHafalan && d.memoAvg !== null) {
+            nodes.push(UI.el('tr', {},
+              UI.el('td', {}, ''), UI.el('td', {}, "Hafalan Al-Qur'an"),
+              UI.el('td', {}, '2'), UI.el('td', {}, String(KKM)),
+              UI.el('td', {}, `${d.memoAvg} (${predikatOf(d.memoAvg)})`)));
+          }
+        }
+        if (!nodes.length) return UI.el('p', { class: 'muted small' }, 'Belum ada nilai yang diinput guru untuk siswa ini.');
+        return UI.el('table', { class: 'rapor' },
+          UI.el('thead', {}, UI.el('tr', {},
+            UI.el('th', {}, 'No'), UI.el('th', {}, 'Mata Pelajaran'),
+            UI.el('th', {}, 'SKK'), UI.el('th', {}, 'KKM'),
+            UI.el('th', {}, 'Nilai (Predikat)'),
           )),
-        ];
-      };
+          UI.el('tbody', {}, nodes),
+        );
+      }
 
-      const sheet = UI.el('div', { class: 'panel rapor-sheet' },
-        UI.el('div', { style: { textAlign: 'center', marginBottom: 'var(--s-4)' } },
-          UI.el('h2', { style: { margin: 0 } }, 'LAPORAN HASIL BELAJAR (RAPOR)'),
+      /* --- Kop rapor & data siswa (dipakai berulang di tiap "halaman" logis) --- */
+      const kopHead = () => UI.el('div', { class: 'rapor-kop', style: { marginBottom: 'var(--s-3)' } },
+        UI.el('div', { style: { textAlign: 'center' } },
+          UI.el('h2', { style: { margin: '0 0 4px' } }, 'LAPORAN HASIL BELAJAR (RAPOR)'),
           UI.el('div', { class: 'small' }, tenant?.name || ''),
           UI.el('div', { class: 'xs muted' }, tenant?.address || ''),
         ),
-        UI.el('div', { class: 'grid grid-2', style: { marginBottom: 'var(--s-3)' } },
+        UI.el('div', { class: 'grid grid-2', style: { marginTop: 'var(--s-3)', fontSize: '0.88rem' } },
           UI.el('div', {},
-            UI.el('div', { class: 'small' }, `Nama Peserta Didik : ${s.name}`),
-            UI.el('div', { class: 'small' }, `NIS/NISN : ${s.nis || '—'}`),
-            UI.el('div', { class: 'small' }, `Kelas : ${cls?.name || '—'}`),
+            UI.el('div', {}, `Nama Peserta Didik   : ${s.name}`),
+            UI.el('div', {}, `Nomor Induk/NISN     : ${s.nis || '—'}`),
+            UI.el('div', {}, `Kelas / Tingkatan    : ${cls?.name || '—'}`),
           ),
           UI.el('div', {},
-            UI.el('div', { class: 'small' }, `Semester : ${semester}`),
-            UI.el('div', { class: 'small' }, `Tahun Pelajaran : ${activeYear?.name || '—'}`),
+            UI.el('div', {}, `Tahun Pelajaran      : ${activeYear?.name || '—'}`),
+            UI.el('div', {}, `Semester             : ${semester}`),
+            d.cls?.jurusan ? UI.el('div', {}, `Jurusan/Peminatan    : ${d.cls.jurusan}`) : null,
           ),
         ),
+        UI.el('h3', { style: { textAlign: 'center', margin: 'var(--s-3) 0', letterSpacing: '1px' } }, 'CAPAIAN HASIL BELAJAR'),
+      );
 
+      /* --- Ekstra Kurikuler & Kegiatan/Prestasi (contenteditable, 3 baris) --- */
+      const eskulRows = [];
+      const kegRows = [];
+      for (let i = 0; i < 3; i++) {
+        const saveEskul = saved?.eskul?.[i] || {};
+        const nm = UI.el('div', { class: 'rapor-edit', contenteditable: 'true', style: { minHeight: '32px' } }, saveEskul.nama || '');
+        const pr = UI.el('div', { class: 'rapor-edit', contenteditable: 'true', style: { minHeight: '32px' } }, saveEskul.predikat || '-');
+        const ds = UI.el('div', { class: 'rapor-edit', contenteditable: 'true', style: { minHeight: '32px' } }, saveEskul.deskripsi || '-');
+        eskulRows.push({ nm, pr, ds });
+        const saveKeg = saved?.kegiatan?.[i] || {};
+        const jn = UI.el('div', { class: 'rapor-edit', contenteditable: 'true', style: { minHeight: '32px' } }, saveKeg.jenis || '-');
+        const ps = UI.el('div', { class: 'rapor-edit', contenteditable: 'true', style: { minHeight: '32px' } }, saveKeg.prestasi || '-');
+        kegRows.push({ jn, ps });
+      }
+      const tanggapan = UI.el('div', { class: 'rapor-edit', contenteditable: 'true', style: { minHeight: '60px' } }, saved?.tanggapanOrtu || '');
+
+      const sheet = UI.el('div', { class: 'panel rapor-sheet' },
+        /* Halaman logis 1 — Sikap */
+        kopHead(),
         UI.el('h3', {}, 'A. Sikap'),
-        UI.el('div', { class: 'grid grid-2' },
+        UI.el('div', { class: 'grid grid-2', style: { gap: '14px' } },
           UI.el('div', {},
-            UI.el('div', { class: 'row between' },
-              UI.el('strong', { class: 'small' }, '1. Sikap Spiritual — Predikat: '),
-              UI.el('span', {}, spiritualPred, UI.el('span', { class: 'print-predikat' }, '')),
-              aiBtn('spiritual', spiritualDesc)),
+            UI.el('div', { class: 'small', style: { fontWeight: 600, marginBottom: '4px' } }, '1. Sikap Spiritual'),
+            UI.el('div', { class: 'row between no-print', style: { alignItems: 'center' } },
+              UI.el('span', { class: 'xs muted' }, 'Predikat: '), spiritualPred, aiBtn('spiritual', spiritualDesc)),
+            UI.el('div', { class: 'print-predikat' }, `Predikat: ${saved?.sikapSpiritual?.predikat || 'B'}`),
             spiritualDesc,
           ),
           UI.el('div', {},
-            UI.el('div', { class: 'row between' },
-              UI.el('strong', { class: 'small' }, '2. Sikap Sosial — Predikat: '),
-              UI.el('span', {}, sosialPred, UI.el('span', { class: 'print-predikat' }, '')),
-              aiBtn('sosial', sosialDesc)),
+            UI.el('div', { class: 'small', style: { fontWeight: 600, marginBottom: '4px' } }, '2. Sikap Sosial'),
+            UI.el('div', { class: 'row between no-print', style: { alignItems: 'center' } },
+              UI.el('span', { class: 'xs muted' }, 'Predikat: '), sosialPred, aiBtn('sosial', sosialDesc)),
+            UI.el('div', { class: 'print-predikat' }, `Predikat: ${saved?.sikapSosial?.predikat || 'B'}`),
             sosialDesc,
           ),
         ),
 
-        UI.el('h3', { style: { marginTop: 'var(--s-4)' } }, 'B. Pengetahuan & Keterampilan'),
-        d.subjects.length
-          ? UI.el('table', { class: 'rapor' },
-            UI.el('thead', {}, UI.el('tr', {},
-              UI.el('th', {}, 'No'), UI.el('th', {}, 'Mata Pelajaran'), UI.el('th', {}, 'KKM'), UI.el('th', {}, 'Nilai (Predikat)'))),
-            UI.el('tbody', {},
-              mapelRows('umum', 'Kelompok Umum'),
-              mapelRows('pesantren', 'Kelompok Khusus'),
-              d.memoAvg !== null ? UI.el('tr', {},
-                UI.el('td', {}, ''), UI.el('td', {}, "Hafalan Al-Qur'an"),
-                UI.el('td', {}, String(KKM)), UI.el('td', {}, `${d.memoAvg} (${predikatOf(d.memoAvg)})`)) : null,
-            ))
-          : UI.el('p', { class: 'muted small' }, 'Belum ada nilai yang diinput guru untuk siswa ini.'),
+        /* B. Pengetahuan */
+        UI.el('h3', { style: { marginTop: 'var(--s-4)' } }, 'B. Pengetahuan'),
+        mapelRows('P'),
 
-        UI.el('h3', {}, 'C. Ketidakhadiran'),
-        UI.el('table', { class: 'rapor', style: { maxWidth: '360px' } },
+        /* C. Keterampilan */
+        UI.el('h3', {}, 'C. Keterampilan'),
+        mapelRows('K'),
+
+        /* D. Ekstra Kurikuler */
+        UI.el('h3', {}, 'D. Ekstra Kurikuler'),
+        UI.el('table', { class: 'rapor' },
+          UI.el('thead', {}, UI.el('tr', {},
+            UI.el('th', { style: { width: '48px' } }, 'No'),
+            UI.el('th', {}, 'Kegiatan Ekstrakurikuler'),
+            UI.el('th', { style: { width: '110px' } }, 'Predikat'),
+            UI.el('th', {}, 'Deskripsi'),
+          )),
+          UI.el('tbody', {}, eskulRows.map((r, i) => UI.el('tr', {},
+            UI.el('td', {}, String(i + 1)),
+            UI.el('td', {}, r.nm),
+            UI.el('td', {}, r.pr),
+            UI.el('td', {}, r.ds),
+          ))),
+        ),
+
+        /* E. Kegiatan (dengan kolom Prestasi) */
+        UI.el('h3', {}, 'E. Kegiatan'),
+        UI.el('table', { class: 'rapor' },
+          UI.el('thead', {}, UI.el('tr', {},
+            UI.el('th', { style: { width: '48px' } }, 'No'),
+            UI.el('th', {}, 'Jenis Kegiatan'),
+            UI.el('th', {}, 'Prestasi'),
+          )),
+          UI.el('tbody', {}, kegRows.map((r, i) => UI.el('tr', {},
+            UI.el('td', {}, String(i + 1)),
+            UI.el('td', {}, r.jn),
+            UI.el('td', {}, r.ps),
+          ))),
+        ),
+
+        /* Ketidakhadiran (rekap otomatis) */
+        UI.el('h3', {}, 'Ketidakhadiran'),
+        UI.el('table', { class: 'rapor', style: { maxWidth: '340px' } },
           UI.el('tbody', {},
             UI.el('tr', {}, UI.el('td', {}, 'Sakit'), UI.el('td', {}, `${d.recap.sakit} hari`)),
             UI.el('tr', {}, UI.el('td', {}, 'Izin'), UI.el('td', {}, `${d.recap.izin} hari`)),
             UI.el('tr', {}, UI.el('td', {}, 'Tanpa keterangan'), UI.el('td', {}, `${d.recap.alfa} hari`)),
           )),
 
-        UI.el('h3', {}, 'D. Prestasi & Catatan Kebaikan'),
-        d.goods.length
-          ? UI.el('ul', { class: 'small', style: { margin: '4px 0 14px 18px' } },
-            d.goods.map((g) => UI.el('li', {}, `${fmtDate(g.date)} — ${g.chronology}`)))
-          : UI.el('p', { class: 'muted small' }, '—'),
-
-        UI.el('div', { class: 'row between', style: { alignItems: 'center' } },
-          UI.el('h3', {}, 'E. Catatan Penanggung Jawab Rombel'),
+        /* F. Catatan PJ */
+        UI.el('div', { class: 'row between no-print', style: { alignItems: 'center' } },
+          UI.el('h3', {}, 'F. Catatan Penanggungjawab Rombel'),
           aiBtn('catatan', catatanPj)),
+        UI.el('h3', { class: 'print-predikat' }, 'F. Catatan Penanggungjawab Rombel'),
         catatanPj,
 
-        UI.el('div', { class: 'grid grid-3', style: { marginTop: '40px', textAlign: 'center' } },
-          UI.el('div', { class: 'small' }, 'Orang Tua/Wali', UI.el('div', { style: { height: '56px' } }), '(………………………)'),
-          UI.el('div', { class: 'small' }, 'Penanggung Jawab Rombel', UI.el('div', { style: { height: '56px' } }), `( ${Store.get('users', ctx.session.userId)?.name || '………'} )`),
-          UI.el('div', { class: 'small' }, 'Kepala Sekolah', UI.el('div', { style: { height: '56px' } }), `( ${tenant?.adminName || '………'} )`),
+        /* G. Tanggapan Orang Tua/Wali */
+        UI.el('h3', {}, 'G. Tanggapan Orang Tua/Wali'),
+        tanggapan,
+
+        /* Blok tanda tangan — Ortu | PJ Rombel | Kepala */
+        UI.el('div', { style: { marginTop: '36px', fontSize: '0.88rem' } },
+          UI.el('div', { style: { textAlign: 'right', marginBottom: '4px' } },
+            `${tenant?.address?.split(',').slice(-1)[0]?.trim() || 'Makassar'}, ${fmtDate(new Date().toISOString().slice(0, 10))}`),
+          UI.el('div', { class: 'grid grid-3', style: { textAlign: 'center', gap: '16px' } },
+            UI.el('div', {},
+              'Mengetahui Orang Tua/Wali',
+              UI.el('div', { style: { height: '64px' } }),
+              '(………………………)'),
+            UI.el('div', {},
+              'Penanggung Jawab Rombel',
+              UI.el('div', { style: { height: '64px' } }),
+              `( ${Store.get('users', ctx.session.userId)?.name || '………'} )`,
+              UI.el('div', { class: 'xs muted' }, 'NIP —')),
+            UI.el('div', {},
+              `Mengetahui, Kepala ${tenant?.name || 'Sekolah'}`,
+              UI.el('div', { style: { height: '64px' } }),
+              `( ${tenant?.adminName || '………'} )`,
+              UI.el('div', { class: 'xs muted' }, 'NIP —')),
+          ),
         ),
       );
 
@@ -1373,9 +1502,13 @@ const routes = {
         const data = {
           tenantId: tid, studentId: s.id, classId: s.classId, semester,
           year: activeYear?.name || null,
+          jurusan: d.cls?.jurusan || null,
           sikapSpiritual: { predikat: spiritualPred.value, deskripsi: spiritualDesc.textContent.trim() },
           sikapSosial: { predikat: sosialPred.value, deskripsi: sosialDesc.textContent.trim() },
           catatanPj: catatanPj.textContent.trim(),
+          tanggapanOrtu: tanggapan.textContent.trim(),
+          eskul: eskulRows.map((r) => ({ nama: r.nm.textContent.trim(), predikat: r.pr.textContent.trim(), deskripsi: r.ds.textContent.trim() })),
+          kegiatan: kegRows.map((r) => ({ jenis: r.jn.textContent.trim(), prestasi: r.ps.textContent.trim() })),
           subjects: d.subjects, memoAvg: d.memoAvg, attendance: d.recap,
           avgScore: d.avgScore,
         };

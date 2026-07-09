@@ -5,7 +5,7 @@
    dan agar mudah ditukar dengan REST API /v1 di produksi.
    ============================================================ */
 
-const LS_KEY = 'po.db.v4'; // v4: sesi absensi kustom (sessionTypes) dikelola admin
+const LS_KEY = 'po.db.v5'; // v5: mapel dengan SKK + kategori rapor SHI (umum/peminatan/pemberdayaan/keterampilan)
 const DRAFT_KEY = 'po.drafts.v1';
 
 let db = null;
@@ -257,12 +257,21 @@ function buildSeed() {
     { id: 'rom_2', tenantId: T1, name: 'Kamar Al-Fath 2', supervisorId: 'usr_guru2', capacity: 8, location: 'Gedung A Lt. 1' },
   ];
   const subjects = [
-    { id: 'sub_mtk', tenantId: T1, code: 'MTK', name: 'Matematika', category: 'umum', teacherIds: ['usr_guru3'] },
-    { id: 'sub_ipa', tenantId: T1, code: 'IPA', name: 'IPA Terpadu', category: 'umum', teacherIds: ['usr_guru3'] },
-    { id: 'sub_bind', tenantId: T1, code: 'BIND', name: 'Bahasa Indonesia', category: 'umum', teacherIds: ['usr_guru2'] },
-    { id: 'sub_fiqih', tenantId: T1, code: 'FQH', name: 'Fiqih', category: 'pesantren', teacherIds: ['usr_guru1'] },
-    { id: 'sub_hadits', tenantId: T1, code: 'HDT', name: 'Hadits', category: 'pesantren', teacherIds: ['usr_guru1'] },
-    { id: 'sub_barab', tenantId: T1, code: 'BAR', name: 'Bahasa Arab', category: 'pesantren', teacherIds: ['usr_guru1'] },
+    /* Kelompok Umum */
+    { id: 'sub_agama', tenantId: T1, code: 'AGM', name: 'Pendidikan Agama', category: 'umum', skk: 2, teacherIds: ['usr_guru1'] },
+    { id: 'sub_ppkn', tenantId: T1, code: 'PPKN', name: 'Pendidikan Pancasila dan Kewarganegaraan (PPKn)', category: 'umum', skk: 2, teacherIds: ['usr_guru2'] },
+    { id: 'sub_bind', tenantId: T1, code: 'BIND', name: 'Bahasa Indonesia', category: 'umum', skk: 1, teacherIds: ['usr_guru2'] },
+    { id: 'sub_bing', tenantId: T1, code: 'BING', name: 'Bahasa Inggris', category: 'umum', skk: 2, teacherIds: ['usr_guru2'] },
+    { id: 'sub_mtk', tenantId: T1, code: 'MTK', name: 'Matematika', category: 'umum', skk: 1, teacherIds: ['usr_guru3'] },
+    { id: 'sub_ipa', tenantId: T1, code: 'IPA', name: 'Ilmu Pengetahuan Alam', category: 'umum', skk: 1, teacherIds: ['usr_guru3'] },
+    { id: 'sub_ips', tenantId: T1, code: 'IPS', name: 'Ilmu Pengetahuan Sosial', category: 'umum', skk: 2, teacherIds: ['usr_guru3'] },
+    /* Kelompok Khusus — Pemberdayaan */
+    { id: 'sub_hafalan', tenantId: T1, code: 'HFZ', name: "Hafalan Al-Qur'an", category: 'pemberdayaan', skk: 2, teacherIds: ['usr_guru1'] },
+    { id: 'sub_barab', tenantId: T1, code: 'BAR', name: 'Bahasa Arab', category: 'pemberdayaan', skk: 1, teacherIds: ['usr_guru1'] },
+    /* Kelompok Khusus — Keterampilan */
+    { id: 'sub_seni', tenantId: T1, code: 'SBK', name: 'Seni Budaya', category: 'keterampilan', skk: 2, teacherIds: ['usr_guru2'] },
+    { id: 'sub_prakarya', tenantId: T1, code: 'PRK', name: 'Prakarya', category: 'keterampilan', skk: 1, teacherIds: ['usr_guru2'] },
+    { id: 'sub_pjok', tenantId: T1, code: 'PJK', name: 'PJOK', category: 'keterampilan', skk: 1, teacherIds: ['usr_guru3'] },
   ];
   const gradeComponents = [
     { id: 'gc_harian', tenantId: T1, name: 'Ulangan Harian', category: 'umum', weight: 30, maxScale: 100, publishPolicy: 'auto' },
@@ -347,7 +356,7 @@ function buildSeed() {
       id: 'usr_guru1', tenantId: T1, role: 'teacher', name: 'Ust. Abdurrahman Hakim', identifier: 'ustadz@alhikmah.sch.id',
       email: 'ustadz@alhikmah.sch.id', phone: '0812000001', password: 'guru123', status: 'active',
       staffRoles: ['ustadz', 'wali_kelas', 'musyrif'],
-      classIds: ['cls_7a'], halaqahIds: ['hlq_umar'], subjectIds: ['sub_fiqih', 'sub_hadits', 'sub_barab'], roomIds: [],
+      classIds: ['cls_7a'], halaqahIds: ['hlq_umar'], subjectIds: ['sub_agama', 'sub_ppkn', 'sub_barab'], roomIds: [],
     },
     {
       id: 'usr_guru2', tenantId: T1, role: 'teacher', name: 'Ust. Lukman Hafidz', identifier: 'lukman@alhikmah.sch.id',
@@ -434,7 +443,11 @@ function buildSeed() {
 
   /* --- Nilai --- */
   const gradeEntries = [];
-  const gradePairs = [['sub_mtk', 'gc_harian'], ['sub_mtk', 'gc_tugas'], ['sub_ipa', 'gc_harian'], ['sub_bind', 'gc_tugas'], ['sub_fiqih', 'gc_harian'], ['sub_barab', 'gc_tugas']];
+  const gradePairs = [
+    ['sub_agama', 'gc_harian'], ['sub_ppkn', 'gc_harian'], ['sub_bind', 'gc_tugas'],
+    ['sub_bing', 'gc_harian'], ['sub_mtk', 'gc_harian'], ['sub_ipa', 'gc_harian'],
+    ['sub_ips', 'gc_harian'], ['sub_barab', 'gc_tugas'],
+  ];
   students.filter((s) => s.tenantId === T1).forEach((s, si) => {
     gradePairs.forEach(([subjectId, componentId], gi) => {
       gradeEntries.push({
