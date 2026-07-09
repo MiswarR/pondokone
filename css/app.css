@@ -709,8 +709,23 @@ body.is-offline .offline-badge { display: block; }
 }
 .rapor-edit:focus { border-color: var(--accent); }
 .print-predikat { display: none; font-weight: 700; }
+
+/* Lembar rapor — kartu modern, latar netral hangat */
+.rapor-sheet {
+  padding: 32px 32px 44px !important;
+  max-width: 900px; margin: 0 auto;
+  border-radius: 18px !important;
+  background: linear-gradient(180deg, var(--accent-soft) 0, transparent 120px), var(--panel-bg, rgba(127,127,127,0.04)) !important;
+}
+.rapor-sheet h2 { letter-spacing: 1.5px; }
+.rapor-sheet h3 { margin: var(--s-4) 0 var(--s-2); font-size: 1rem; padding-bottom: 4px; border-bottom: 2px solid var(--accent); display: inline-block; }
 .rapor-sheet table.rapor { width: 100%; border-collapse: collapse; margin: 8px 0 14px; }
 .rapor-sheet table.rapor th, .rapor-sheet table.rapor td {
-  border: 1px solid var(--line); padding: 6px 10px; font-size: 0.9rem; text-align: start;
+  border: 1px solid var(--line); padding: 6px 10px; font-size: 0.88rem; text-align: start; vertical-align: middle;
 }
-.rapor-sheet table.rapor th { background: var(--accent-soft); }
+.rapor-sheet table.rapor th { background: var(--accent-soft); font-weight: 600; }
+.rapor-sheet table.rapor tr.grp td { background: rgba(127,127,127,0.08); font-style: italic; }
+.rapor-sheet table.rapor td:nth-child(1),
+.rapor-sheet table.rapor td:nth-child(3),
+.rapor-sheet table.rapor td:nth-child(4) { text-align: center; white-space: nowrap; }
+.rapor-sheet table.rapor td:last-child { text-align: center; white-space: nowrap; font-weight: 600; }
